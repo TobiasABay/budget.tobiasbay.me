@@ -1,6 +1,6 @@
 import { useAuth } from '@clerk/clerk-react';
 import { Navigate } from 'react-router-dom';
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { theme } from '../ColorTheme';
 
