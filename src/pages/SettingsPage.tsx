@@ -1,10 +1,12 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress } from "@mui/material";
+import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import DeleteIcon from '@mui/icons-material/Delete';
+import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
+import type { Currency } from "../utils/currency";
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
@@ -93,6 +95,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [creating, setCreating] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -182,6 +185,14 @@ export default function SettingsPage() {
     navigate(`/budgets/${year}`);
   };
 
+  const handleCurrencyChange = (currencyCode: string) => {
+    const selectedCurrency = CURRENCIES.find(c => c.code === currencyCode);
+    if (selectedCurrency) {
+      setCurrency(selectedCurrency);
+      setStoredCurrency(currencyCode);
+    }
+  };
+
   return (
     <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
       <Navbar />
@@ -189,6 +200,80 @@ export default function SettingsPage() {
         <Typography sx={{ color: theme.palette.text.primary, marginBottom: '2rem' }} variant="h4">
           Settings
         </Typography>
+
+        <Paper
+          sx={{
+            bgcolor: theme.palette.background.paper,
+            padding: '2rem',
+            marginBottom: '2rem',
+          }}
+        >
+          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
+            Currency
+          </Typography>
+          <FormControl fullWidth sx={{ maxWidth: '400px' }}>
+            <InputLabel
+              sx={{
+                color: theme.palette.text.secondary,
+                '&.Mui-focused': {
+                  color: theme.palette.primary.main,
+                },
+              }}
+            >
+              Select Currency
+            </InputLabel>
+            <Select
+              value={currency.code}
+              onChange={(e) => handleCurrencyChange(e.target.value)}
+              label="Select Currency"
+              sx={{
+                color: theme.palette.text.primary,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.secondary.main,
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main,
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main,
+                },
+                '& .MuiSvgIcon-root': {
+                  color: theme.palette.text.primary,
+                },
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    bgcolor: theme.palette.background.paper,
+                    color: theme.palette.text.primary,
+                  }
+                }
+              }}
+            >
+              {CURRENCIES.map((curr) => (
+                <MenuItem
+                  key={curr.code}
+                  value={curr.code}
+                  sx={{
+                    color: theme.palette.text.primary,
+                    '&:hover': {
+                      bgcolor: theme.palette.background.default,
+                    },
+                    '&.Mui-selected': {
+                      bgcolor: theme.palette.primary.main,
+                      color: theme.palette.primary.contrastText,
+                      '&:hover': {
+                        bgcolor: theme.palette.primary.dark,
+                      },
+                    },
+                  }}
+                >
+                  {curr.symbol} {curr.name} ({curr.code})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Paper>
 
         {error && (
           <Paper

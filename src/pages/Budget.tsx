@@ -6,6 +6,8 @@ import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { getStoredCurrency, formatCurrency } from "../utils/currency";
+import type { Currency } from "../utils/currency";
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
@@ -39,6 +41,7 @@ export default function Budget() {
     const [saving, setSaving] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [selectedItemForDelete, setSelectedItemForDelete] = useState<string | null>(null);
+    const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
 
@@ -48,6 +51,31 @@ export default function Budget() {
             loadBudgetData();
         }
     }, [isLoaded, user?.id, year]);
+
+    // Listen for currency changes in localStorage
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'budget_currency' && e.newValue) {
+                const newCurrency = getStoredCurrency();
+                setCurrency(newCurrency);
+            }
+        };
+
+        // Check for currency changes periodically (since storage events don't work for same-tab changes)
+        const interval = setInterval(() => {
+            const currentCurrency = getStoredCurrency();
+            if (currentCurrency.code !== currency.code) {
+                setCurrency(currentCurrency);
+            }
+        }, 500);
+
+        window.addEventListener('storage', handleStorageChange);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(interval);
+        };
+    }, [currency.code]);
 
     // Save budget data whenever lineItems change
     useEffect(() => {
@@ -310,7 +338,7 @@ export default function Budget() {
                                         padding: '12px 8px',
                                     }}
                                 >
-                                    Figures in dollars
+                                    Amount
                                 </TableCell>
                                 <TableCell
                                     sx={{
@@ -505,7 +533,7 @@ export default function Budget() {
                                                             }}
                                                         />
                                                     ) : (
-                                                        cellValue === 0 ? '' : `$${cellValue.toFixed(2)}`
+                                                        formatCurrency(cellValue, currency)
                                                     )}
                                                 </TableCell>
                                             );
@@ -543,7 +571,7 @@ export default function Budget() {
                                                 bgcolor: theme.palette.background.default,
                                             }}
                                         >
-                                            {totalIncome === 0 ? '-' : `$${totalIncome.toFixed(2)}`}
+                                            {totalIncome === 0 ? '-' : formatCurrency(totalIncome, currency)}
                                         </TableCell>
                                     );
                                 })}
@@ -722,7 +750,7 @@ export default function Budget() {
                                                             }}
                                                         />
                                                     ) : (
-                                                        cellValue === 0 ? '' : `$${cellValue.toFixed(2)}`
+                                                        formatCurrency(cellValue, currency)
                                                     )}
                                                 </TableCell>
                                             );
@@ -760,7 +788,7 @@ export default function Budget() {
                                                 bgcolor: theme.palette.background.default,
                                             }}
                                         >
-                                            {totalExpense === 0 ? '-' : `$${totalExpense.toFixed(2)}`}
+                                            {totalExpense === 0 ? '-' : formatCurrency(totalExpense, currency)}
                                         </TableCell>
                                     );
                                 })}
@@ -812,7 +840,7 @@ export default function Budget() {
                                                 bgcolor: theme.palette.background.default,
                                             }}
                                         >
-                                            {savings === 0 ? '-' : `$${savings.toFixed(2)}`}
+                                            {savings === 0 ? '-' : formatCurrency(savings, currency)}
                                         </TableCell>
                                     );
                                 })}
@@ -856,7 +884,7 @@ export default function Budget() {
                                                 bgcolor: theme.palette.background.default,
                                             }}
                                         >
-                                            {cumulativeSavings === 0 ? '-' : `$${cumulativeSavings.toFixed(2)}`}
+                                            {cumulativeSavings === 0 ? '-' : formatCurrency(cumulativeSavings, currency)}
                                         </TableCell>
                                     );
                                 })}
