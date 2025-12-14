@@ -1,5 +1,4 @@
 name = "budget-tobiasbay-me"
-main = "src/index.js"
 compatibility_date = "2025-12-14"
 pages_build_output_dir = "./dist"
 
@@ -9,15 +8,14 @@ binding = "budget_db"
 database_name = "budget-db"
 database_id = "f2aa434c-95b2-495b-bfa4-e10778b2d7a4"
 
+[env.production]
+name = "budget-tobiasbay-me"
+
 [vars]
 FRONTEND_URL = "https://budget.tobiasbay.me"
 
-routes = [
-  { pattern = "budget.tobiasbay.me/api/*", zone_name = "tobiasbay.me" }
-]
-
-[env.production]
-name = "budget-tobiasbay-me"
+[env.production.vars]
+FRONTEND_URL = "https://budget.tobiasbay.me"
 
 [[env.production.d1_databases]]
 binding = "budget_db"
