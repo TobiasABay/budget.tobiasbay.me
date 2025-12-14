@@ -38,6 +38,7 @@ export default function Budget() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+    const [selectedItemForDelete, setSelectedItemForDelete] = useState<string | null>(null);
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
 
@@ -153,6 +154,7 @@ export default function Budget() {
         const currentValue = item?.months[month] || 0;
         setEditingCell({ itemId, month });
         setEditValue(currentValue.toString());
+        setSelectedItemForDelete(null);
     };
 
     const handleCellSave = () => {
@@ -193,6 +195,7 @@ export default function Budget() {
 
     const handleFrequencyClick = (itemId: string) => {
         setEditingFrequency(itemId);
+        setSelectedItemForDelete(null);
     };
 
     const handleFrequencyChange = (itemId: string, frequency: string) => {
@@ -212,6 +215,11 @@ export default function Budget() {
     const handleDeleteItem = (itemId: string) => {
         const updatedItems = lineItems.filter(item => item.id !== itemId);
         setLineItems(updatedItems);
+        setSelectedItemForDelete(null);
+    };
+
+    const handleNameCellClick = (itemId: string) => {
+        setSelectedItemForDelete(selectedItemForDelete === itemId ? null : itemId);
     };
 
     return (
@@ -341,31 +349,38 @@ export default function Budget() {
                                 .map((item) => (
                                     <TableRow key={item.id}>
                                         <TableCell
+                                            onClick={() => handleNameCellClick(item.id)}
                                             sx={{
                                                 color: theme.palette.success.main,
                                                 borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                 padding: '12px 8px',
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                    bgcolor: theme.palette.background.default,
+                                                },
                                             }}
                                         >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                 <span style={{ flex: 1 }}>{item.name}</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteItem(item.id);
-                                                    }}
-                                                    sx={{
-                                                        color: theme.palette.error.main,
-                                                        padding: '4px',
-                                                        '&:hover': {
-                                                            bgcolor: theme.palette.error.main,
-                                                            color: theme.palette.error.contrastText,
-                                                        },
-                                                    }}
-                                                >
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
+                                                {selectedItemForDelete === item.id && (
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteItem(item.id);
+                                                        }}
+                                                        sx={{
+                                                            color: theme.palette.error.main,
+                                                            padding: '4px',
+                                                            '&:hover': {
+                                                                bgcolor: theme.palette.error.main,
+                                                                color: theme.palette.error.contrastText,
+                                                            },
+                                                        }}
+                                                    >
+                                                        <DeleteIcon fontSize="small" />
+                                                    </IconButton>
+                                                )}
                                             </Box>
                                         </TableCell>
                                         <TableCell
@@ -551,31 +566,38 @@ export default function Budget() {
                                 .map((item) => (
                                     <TableRow key={item.id}>
                                         <TableCell
+                                            onClick={() => handleNameCellClick(item.id)}
                                             sx={{
                                                 color: theme.palette.error.main,
                                                 borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                 padding: '12px 8px',
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                    bgcolor: theme.palette.background.default,
+                                                },
                                             }}
                                         >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                 <span style={{ flex: 1 }}>{item.name}</span>
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteItem(item.id);
-                                                    }}
-                                                    sx={{
-                                                        color: theme.palette.error.main,
-                                                        padding: '4px',
-                                                        '&:hover': {
-                                                            bgcolor: theme.palette.error.main,
-                                                            color: theme.palette.error.contrastText,
-                                                        },
-                                                    }}
-                                                >
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
+                                                {selectedItemForDelete === item.id && (
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteItem(item.id);
+                                                        }}
+                                                        sx={{
+                                                            color: theme.palette.error.main,
+                                                            padding: '4px',
+                                                            '&:hover': {
+                                                                bgcolor: theme.palette.error.main,
+                                                                color: theme.palette.error.contrastText,
+                                                            },
+                                                        }}
+                                                    >
+                                                        <DeleteIcon fontSize="small" />
+                                                    </IconButton>
+                                                )}
                                             </Box>
                                         </TableCell>
                                         <TableCell
