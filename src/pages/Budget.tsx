@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState } from "react";
 import AddIcon from '@mui/icons-material/Add';
@@ -25,6 +25,11 @@ export default function Budget() {
     const [selectedType, setSelectedType] = useState<'income' | 'expense' | null>(null);
     const [itemName, setItemName] = useState('');
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
+    const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
+    const [editValue, setEditValue] = useState('');
+    const [editingFrequency, setEditingFrequency] = useState<string | null>(null);
+
+    const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
 
     const handleOpenModal = () => {
         setModalOpen(true);
@@ -60,6 +65,65 @@ export default function Budget() {
 
         setLineItems([...lineItems, newItem]);
         handleCloseModal();
+    };
+
+    const handleCellClick = (itemId: string, month: string) => {
+        const item = lineItems.find(i => i.id === itemId);
+        const currentValue = item?.months[month] || 0;
+        setEditingCell({ itemId, month });
+        setEditValue(currentValue.toString());
+    };
+
+    const handleCellSave = () => {
+        if (!editingCell) return;
+
+        const numericValue = parseFloat(editValue) || 0;
+
+        setLineItems(lineItems.map(item => {
+            if (item.id === editingCell.itemId) {
+                return {
+                    ...item,
+                    months: {
+                        ...item.months,
+                        [editingCell.month]: numericValue
+                    }
+                };
+            }
+            return item;
+        }));
+
+        setEditingCell(null);
+        setEditValue('');
+    };
+
+    const handleCellCancel = () => {
+        setEditingCell(null);
+        setEditValue('');
+    };
+
+    const handleCellKeyPress = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleCellSave();
+        } else if (e.key === 'Escape') {
+            handleCellCancel();
+        }
+    };
+
+    const handleFrequencyClick = (itemId: string) => {
+        setEditingFrequency(itemId);
+    };
+
+    const handleFrequencyChange = (itemId: string, frequency: string) => {
+        setLineItems(lineItems.map(item => {
+            if (item.id === itemId) {
+                return {
+                    ...item,
+                    frequency: frequency
+                };
+            }
+            return item;
+        }));
+        setEditingFrequency(null);
     };
 
     return (
@@ -144,29 +208,172 @@ export default function Budget() {
                                         {item.name}
                                     </TableCell>
                                     <TableCell
+                                        onClick={() => handleFrequencyClick(item.id)}
                                         sx={{
                                             color: theme.palette.text.primary,
                                             borderRight: `1px solid ${theme.palette.secondary.main}`,
                                             padding: '12px 8px',
+                                            cursor: 'pointer',
+                                            '&:hover': {
+                                                bgcolor: theme.palette.background.default,
+                                            },
                                         }}
                                     >
-                                        {item.frequency}
+                                        {editingFrequency === item.id ? (
+                                            <FormControl size="small" sx={{ minWidth: 120 }}>
+                                                <Select
+                                                    value={item.frequency}
+                                                    onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
+                                                    onBlur={() => setEditingFrequency(null)}
+                                                    autoFocus
+                                                    sx={{
+                                                        color: theme.palette.text.primary,
+                                                        '& .MuiOutlinedInput-notchedOutline': {
+                                                            borderColor: theme.palette.primary.main,
+                                                        },
+                                                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                            borderColor: theme.palette.primary.main,
+                                                        },
+                                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                            borderColor: theme.palette.primary.main,
+                                                        },
+                                                        '& .MuiSvgIcon-root': {
+                                                            color: theme.palette.text.primary,
+                                                        },
+                                                    }}
+                                                    MenuProps={{
+                                                        PaperProps: {
+                                                            sx: {
+                                                                bgcolor: theme.palette.background.paper,
+                                                                color: theme.palette.text.primary,
+                                                            }
+                                                        }
+                                                    }}
+                                                >
+                                                    {FREQUENCY_OPTIONS.map((option) => (
+                                                        <MenuItem
+                                                            key={option}
+                                                            value={option}
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                '&:hover': {
+                                                                    bgcolor: theme.palette.background.default,
+                                                                },
+                                                                '&.Mui-selected': {
+                                                                    bgcolor: theme.palette.primary.main,
+                                                                    color: theme.palette.primary.contrastText,
+                                                                    '&:hover': {
+                                                                        bgcolor: theme.palette.primary.dark,
+                                                                    },
+                                                                },
+                                                            }}
+                                                        >
+                                                            {option}
+                                                        </MenuItem>
+                                                    ))}
+                                                </Select>
+                                            </FormControl>
+                                        ) : (
+                                            item.frequency
+                                        )}
                                     </TableCell>
-                                    {MONTHS.map((month) => (
-                                        <TableCell
-                                            key={month}
-                                            align="center"
-                                            sx={{
-                                                color: theme.palette.text.primary,
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
-                                            }}
-                                        >
-                                            ${item.months[month] || 0}
-                                        </TableCell>
-                                    ))}
+                                    {MONTHS.map((month) => {
+                                        const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                        const cellValue = item.months[month] || 0;
+
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                onClick={() => handleCellClick(item.id, month)}
+                                                sx={{
+                                                    color: theme.palette.text.primary,
+                                                    padding: '4px',
+                                                    fontSize: '0.875rem',
+                                                    cursor: 'pointer',
+                                                    '&:hover': {
+                                                        bgcolor: theme.palette.background.default,
+                                                    },
+                                                }}
+                                            >
+                                                {isEditing ? (
+                                                    <TextField
+                                                        value={editValue}
+                                                        onChange={(e) => setEditValue(e.target.value)}
+                                                        onBlur={handleCellSave}
+                                                        onKeyDown={handleCellKeyPress}
+                                                        autoFocus
+                                                        type="number"
+                                                        size="small"
+                                                        sx={{
+                                                            width: '80px',
+                                                            '& .MuiOutlinedInput-root': {
+                                                                color: theme.palette.text.primary,
+                                                                bgcolor: theme.palette.background.paper,
+                                                                '& fieldset': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&:hover fieldset': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&.Mui-focused fieldset': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                            },
+                                                        }}
+                                                        inputProps={{
+                                                            style: {
+                                                                textAlign: 'center',
+                                                                padding: '4px 8px',
+                                                            }
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    cellValue === 0 ? '' : `$${cellValue.toFixed(2)}`
+                                                )}
+                                            </TableCell>
+                                        );
+                                    })}
                                 </TableRow>
                             ))}
+                            {/* Total Income Row */}
+                            {lineItems.some(item => item.type === 'income') && (
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={2}
+                                        sx={{
+                                            color: theme.palette.success.main,
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: '12px 8px',
+                                            fontWeight: 'bold',
+                                            bgcolor: theme.palette.background.default,
+                                        }}
+                                    >
+                                        Total Income
+                                    </TableCell>
+                                    {MONTHS.map((month) => {
+                                        const totalIncome = lineItems
+                                            .filter(item => item.type === 'income')
+                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: theme.palette.success.main,
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                }}
+                                            >
+                                                {totalIncome === 0 ? '-' : `$${totalIncome.toFixed(2)}`}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </Paper>
