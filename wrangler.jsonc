@@ -1,8 +1,13 @@
 {
+  // Cloudflare Pages Configuration
   "name": "budget-tobiasbay-me",
   "compatibility_date": "2025-12-14",
-  "assets": {
-    "directory": "./dist"
-  }
+  
+  // Build output directory for Cloudflare Pages
+  "pages_build_output_dir": "./dist",
+  
+  // Note: Environment variables (like VITE_CLERK_PUBLISHABLE_KEY) should be set in:
+  // Cloudflare Dashboard > Pages > Your Project > Settings > Environment variables
+  // For local development, use .env file with VITE_CLERK_PUBLISHABLE_KEY
 }
 

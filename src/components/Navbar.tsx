@@ -6,6 +6,7 @@ import { theme as customTheme } from '../ColorTheme.tsx';
 import CustomButton from '../components/buttons/CustomButton.tsx';
 import AppsIcon from '@mui/icons-material/Apps';
 import PersonIcon from '@mui/icons-material/Person';
+import { UserButton } from '@clerk/clerk-react';
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function Navbar() {
   const menuItems = [
     { text: 'Budgets', icon: <AppsIcon />, path: '/budgets' },
     { text: 'Loans', icon: <PersonIcon />, path: '/loans' },
+    { text: 'Salary', icon: <PersonIcon />, path: '/salary' },
   ];
 
   return (
@@ -60,6 +62,11 @@ export default function Navbar() {
                   </ListItemButton>
                 </ListItem>
               ))}
+              <ListItem disablePadding>
+                <Box sx={{ padding: '0.5rem 1rem', display: 'flex', justifyContent: 'center', width: '100%' }}>
+                  <UserButton />
+                </Box>
+              </ListItem>
             </List>
           </Drawer>
         </Box>
@@ -70,6 +77,7 @@ export default function Navbar() {
             display: 'flex',
             flexDirection: 'row',
             justifyContent: 'flex-end',
+            alignItems: 'center',
             gap: 2
           }}
         >
@@ -78,6 +86,7 @@ export default function Navbar() {
               {item.text} {item.icon}
             </CustomButton>
           ))}
+          <UserButton />
         </Container>
       )}
     </Box>
