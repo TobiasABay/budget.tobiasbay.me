@@ -6,7 +6,9 @@ import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import DeleteIcon from '@mui/icons-material/Delete';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// Use production API URL so local and production frontends use the same backend and database
+// In dev mode, connect directly to production API. In production, use relative path.
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
 
 async function fetchBudgets(userId: string): Promise<string[]> {
   const response = await fetch(`${API_BASE_URL}/budgets`, {
@@ -35,16 +37,28 @@ async function createBudget(userId: string, year: string): Promise<string[]> {
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to create budget');
+    let errorMessage = 'Failed to create budget';
+    try {
+      const error = await response.json();
+      errorMessage = error.error || errorMessage;
+    } catch (e) {
+      // If response is not JSON, use status text
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
+  if (!data.budgets || !Array.isArray(data.budgets)) {
+    throw new Error('Invalid response from server');
+  }
   return data.budgets;
 }
 
 async function deleteBudget(userId: string, year: string): Promise<string[]> {
-  const response = await fetch(`${API_BASE_URL}/budgets/${year}`, {
+  // URL encode the year parameter to handle special characters
+  const encodedYear = encodeURIComponent(year);
+  const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -53,16 +67,27 @@ async function deleteBudget(userId: string, year: string): Promise<string[]> {
   });
 
   if (!response.ok) {
-    throw new Error('Failed to delete budget');
+    let errorMessage = 'Failed to delete budget';
+    try {
+      const error = await response.json();
+      errorMessage = error.error || errorMessage;
+    } catch (e) {
+      // If response is not JSON, use status text
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await response.json();
+  if (!data.budgets || !Array.isArray(data.budgets)) {
+    throw new Error('Invalid response from server');
+  }
   return data.budgets;
 }
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const [budgetYear, setBudgetYear] = useState<string>('');
   const [budgets, setBudgets] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -70,14 +95,14 @@ export default function SettingsPage() {
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
-    if (user?.id) {
+    if (isLoaded && user?.id) {
       loadBudgets();
     }
-  }, [user?.id]);
+  }, [isLoaded, user?.id]);
 
   const loadBudgets = async () => {
     if (!user?.id) return;
-    
+
     setLoading(true);
     setError('');
     try {
@@ -92,9 +117,35 @@ export default function SettingsPage() {
   };
 
   const handleCreateBudget = async () => {
-    if (!user?.id || !budgetYear) return;
-    
-    if (budgets.includes(budgetYear)) {
+    // Check if user is loaded
+    if (!isLoaded) {
+      setError('Please wait, user information is loading...');
+      return;
+    }
+
+    // Check if user is authenticated
+    if (!user?.id) {
+      setError('You must be signed in to create a budget');
+      return;
+    }
+
+    // Check if year is provided
+    if (!budgetYear || budgetYear.trim() === '') {
+      setError('Please enter a budget year');
+      return;
+    }
+
+    // Validate year format (should be a 4-digit year)
+    const yearNum = parseInt(budgetYear.trim(), 10);
+    if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      setError('Please enter a valid year (2000-2100)');
+      return;
+    }
+
+    const trimmedYear = budgetYear.trim();
+
+    // Check if budget already exists
+    if (budgets.includes(trimmedYear)) {
       setError('Budget already exists');
       return;
     }
@@ -102,11 +153,12 @@ export default function SettingsPage() {
     setCreating(true);
     setError('');
     try {
-      const updatedBudgets = await createBudget(user.id, budgetYear);
+      const updatedBudgets = await createBudget(user.id, trimmedYear);
       setBudgets(updatedBudgets);
       setBudgetYear('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create budget');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create budget';
+      setError(errorMessage);
       console.error('Error creating budget:', err);
     } finally {
       setCreating(false);
@@ -198,7 +250,7 @@ export default function SettingsPage() {
             <Button
               variant="contained"
               onClick={handleCreateBudget}
-              disabled={creating || !budgetYear}
+              disabled={creating || !budgetYear || !isLoaded || !user?.id}
               sx={{
                 bgcolor: theme.palette.primary.main,
                 color: theme.palette.primary.contrastText,
@@ -240,36 +292,36 @@ export default function SettingsPage() {
                 </ListItem>
               ) : (
                 budgets.map((year) => (
-                <ListItem
-                  key={year}
-                  secondaryAction={
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleDeleteBudget(year)}
-                      sx={{
-                        color: theme.palette.error.main,
-                        '&:hover': {
-                          bgcolor: theme.palette.error.main,
-                          color: theme.palette.error.contrastText,
-                        },
-                      }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  }
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: theme.palette.background.default,
-                    },
-                  }}
-                  onClick={() => handleNavigateToBudget(year)}
-                >
-                  <ListItemText
-                    primary={`Budget ${year}`}
-                    sx={{ color: theme.palette.text.primary }}
-                  />
-                </ListItem>
+                  <ListItem
+                    key={year}
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        onClick={() => handleDeleteBudget(year)}
+                        sx={{
+                          color: theme.palette.error.main,
+                          '&:hover': {
+                            bgcolor: theme.palette.error.main,
+                            color: theme.palette.error.contrastText,
+                          },
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: theme.palette.background.default,
+                      },
+                    }}
+                    onClick={() => handleNavigateToBudget(year)}
+                  >
+                    <ListItemText
+                      primary={`Budget ${year}`}
+                      sx={{ color: theme.palette.text.primary }}
+                    />
+                  </ListItem>
                 ))
               )}
             </List>

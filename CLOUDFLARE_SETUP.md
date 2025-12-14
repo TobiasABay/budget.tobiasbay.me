@@ -35,17 +35,30 @@ The database schema has been applied to both local and remote databases. The sch
 
 ## 4. Local Development
 
-The `wrangler.toml` file is already configured with the D1 database binding. To test locally:
+**Important**: Both local and production frontends use the same Cloudflare Pages backend and remote database. This ensures data consistency across environments.
+
+### Running Local Frontend
+
+The local frontend connects directly to the production API (`https://budget.tobiasbay.me/api`):
 
 ```bash
-# Run local development server
-wrangler pages dev ./dist
+# Run local frontend development server
+npm run dev
 
-# Execute SQL queries on local database
-wrangler d1 execute budget-db --file=./schema.sql --config=wrangler.toml
+# Or run both frontend and backend (backend uses remote database)
+npm run dev:all
+```
 
-# Execute SQL queries on remote database
+The local frontend will automatically connect to the production backend, so you'll see the same data as in production.
+
+### Database Management
+
+```bash
+# Execute SQL queries on remote database (used by both local and production)
 wrangler d1 execute budget-db --file=./schema.sql --config=wrangler.toml --remote
+
+# View data in remote database
+wrangler d1 execute budget-db --command="SELECT * FROM budgets" --config=wrangler.toml --remote
 ```
 
 ## 5. Deploy
@@ -65,21 +78,30 @@ The application uses the following API endpoints:
 
 All endpoints require the `X-User-Id` header with the Clerk user ID.
 
-## 7. Database Management
+## 7. Architecture
 
-### View data in local database:
-```bash
-wrangler d1 execute budget-db --command="SELECT * FROM budgets" --config=wrangler.toml
-```
+### Unified Backend and Database
 
-### View data in remote database:
-```bash
-wrangler d1 execute budget-db --command="SELECT * FROM budgets" --config=wrangler.toml --remote
-```
+Both local and production frontends use:
+- **Same Backend**: Cloudflare Pages Functions at `https://budget.tobiasbay.me/api`
+- **Same Database**: Remote D1 database (`budget-db`)
+
+This ensures:
+- Data consistency across environments
+- No need to sync between local and production databases
+- Easier development workflow
+
+### Configuration
+
+- **Local Frontend**: Connects to `https://budget.tobiasbay.me/api` (production backend)
+- **Production Frontend**: Uses relative path `/api` (same production backend)
+- **Backend**: Cloudflare Pages Functions with D1 database binding
+- **Database**: Remote D1 database (same for both environments)
 
 ## Notes
 
 - Each user's budgets are stored in the `budgets` table with `user_id` and `year` columns
-- The D1 database binding is configured in `wrangler.toml` for both local and production environments
-- Make sure to bind the D1 database in the Cloudflare Pages project settings for production
+- The D1 database binding is configured in `wrangler.toml` for production environment
+- Make sure to bind the D1 database in the Cloudflare Pages project settings
+- CORS is configured in the backend to allow requests from any origin
 

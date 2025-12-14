@@ -7,20 +7,41 @@ interface Env {
   budget_db: D1Database;
 }
 
-export const onRequestDelete: PagesFunction<Env> = async (context) => {
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
+};
+
+// Explicit OPTIONS handler for preflight requests
+export const onRequestOptions: PagesFunction<Env> = async () => {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders
+  });
+};
+
+export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
-  const year = params.year as string;
+  const year = decodeURIComponent(params.year as string);
 
-  // Handle CORS
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
-  };
-
+  // Handle CORS preflight (fallback if onRequestOptions doesn't work)
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders
+    });
   }
+
+  if (request.method !== 'DELETE') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Ensure all responses include CORS headers
 
   try {
     // Get user ID from header

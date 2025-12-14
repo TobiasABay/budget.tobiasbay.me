@@ -13,18 +13,30 @@ interface BudgetRequest {
   userId: string;
 }
 
+// CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
+};
+
+// Explicit OPTIONS handler for preflight requests
+export const onRequestOptions: PagesFunction<Env> = async () => {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders
+  });
+};
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
-  // Handle CORS
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
-  };
-
+  // Handle CORS preflight (fallback if onRequestOptions doesn't work)
   if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {
