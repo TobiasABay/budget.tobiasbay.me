@@ -71,5 +71,5 @@ export default defineConfig([
   },
 ])
 ```
-# passwords.tobiasbay.me
+# budget.tobiasbay.me
 # budget.tobiasbay.me

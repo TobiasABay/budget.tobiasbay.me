@@ -15,8 +15,8 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const menuItems = [
-    { text: 'Projects', icon: <AppsIcon />, path: '/projects' },
-    { text: 'About Me', icon: <PersonIcon />, path: '/about' },
+    { text: 'Budgets', icon: <AppsIcon />, path: '/budgets' },
+    { text: 'Loans', icon: <PersonIcon />, path: '/loans' },
   ];
 
   return (
@@ -41,7 +41,7 @@ export default function Navbar() {
         onClick={() => navigate('/')}
       >
         <Typography sx={{ color: customTheme.palette.text.primary, fontWeight: 'bold' }} variant="h6">Tobias Bay</Typography>
-        <Typography sx={{ color: customTheme.palette.secondary.contrastText }} variant="h6">Passwords</Typography>
+        <Typography sx={{ color: customTheme.palette.secondary.contrastText }} variant="h6">Budget</Typography>
       </Container>
 
       {isSmallScreen ? (
