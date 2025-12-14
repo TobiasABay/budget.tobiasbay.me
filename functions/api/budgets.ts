@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 // Cloudflare Pages Function for managing budgets
 // GET /api/budgets - Get all budgets for a user
 // POST /api/budgets - Create a new budget
@@ -18,7 +20,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
   };
 
   if (request.method === 'OPTIONS') {
@@ -26,18 +28,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    // Get user ID from Authorization header (Clerk session token)
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+    // Get user ID from header
+    // In production, you should verify the Clerk session token from the Authorization header
+    // For now, we're using X-User-Id header which is set by the frontend
+    const userId = request.headers.get('X-User-Id');
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: User ID required' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    // Extract user ID from Clerk token (in production, verify the token properly)
-    // For now, we'll get it from the request body or header
-    const userId = request.headers.get('X-User-Id') || 'default-user';
 
     if (request.method === 'GET') {
       // Get all budgets for the user from D1 database
@@ -47,7 +48,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         .all();
 
       const budgets = result.results.map((row: any) => row.year as string);
-      
+
       return new Response(JSON.stringify(budgets), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });

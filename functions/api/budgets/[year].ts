@@ -1,3 +1,5 @@
+/// <reference types="@cloudflare/workers-types" />
+
 // Cloudflare Pages Function for deleting a specific budget
 // DELETE /api/budgets/[year] - Delete a budget
 
@@ -13,7 +15,7 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-User-Id',
   };
 
   if (request.method === 'OPTIONS') {
@@ -22,7 +24,14 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
 
   try {
     // Get user ID from header
-    const userId = request.headers.get('X-User-Id') || 'default-user';
+    const userId = request.headers.get('X-User-Id');
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: User ID required' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     if (!year) {
       return new Response(JSON.stringify({ error: 'Year is required' }), {
