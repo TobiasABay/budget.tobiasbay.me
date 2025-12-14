@@ -1,7 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
-// Cloudflare Pages Function for deleting a specific budget
+// Cloudflare Pages Function for deleting a specific budget and managing budget data
 // DELETE /api/budgets/[year] - Delete a budget
+// GET /api/budgets/[year]/data - Get budget line items
+// PUT /api/budgets/[year]/data - Save budget line items
 
 interface Env {
   budget_db: D1Database;
@@ -34,6 +36,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     });
   }
 
+  // Handle DELETE for budget deletion
   if (request.method !== 'DELETE') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,

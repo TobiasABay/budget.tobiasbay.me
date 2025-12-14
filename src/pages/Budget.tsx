@@ -1,9 +1,14 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, CircularProgress } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
+
+// Use production API URL so local and production frontends use the same backend and database
+// In dev mode, connect directly to production API. In production, use relative path.
+const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
 
 const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -21,6 +26,7 @@ interface LineItem {
 
 export default function Budget() {
     const { year } = useParams<{ year: string }>();
+    const { user, isLoaded } = useUser();
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<'income' | 'expense' | null>(null);
     const [itemName, setItemName] = useState('');
@@ -28,8 +34,79 @@ export default function Budget() {
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
     const [editingFrequency, setEditingFrequency] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
+
+    // Load budget data on mount
+    useEffect(() => {
+        if (isLoaded && user?.id && year) {
+            loadBudgetData();
+        }
+    }, [isLoaded, user?.id, year]);
+
+    // Save budget data whenever lineItems change
+    useEffect(() => {
+        if (isLoaded && user?.id && year && lineItems.length >= 0 && !loading) {
+            // Debounce saves to avoid too many API calls
+            const timeoutId = setTimeout(() => {
+                saveBudgetData();
+            }, 1000);
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [lineItems, isLoaded, user?.id, year]);
+
+    const loadBudgetData = async () => {
+        if (!user?.id || !year) return;
+
+        setLoading(true);
+        try {
+            const encodedYear = encodeURIComponent(year);
+            const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': user.id,
+                },
+            });
+
+            if (response.ok) {
+                const items = await response.json();
+                setLineItems(items);
+            }
+        } catch (error) {
+            console.error('Error loading budget data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const saveBudgetData = async () => {
+        if (!user?.id || !year || saving) return;
+
+        setSaving(true);
+        try {
+            const encodedYear = encodeURIComponent(year);
+            const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': user.id,
+                },
+                body: JSON.stringify({ items: lineItems }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to save budget data');
+            }
+        } catch (error) {
+            console.error('Error saving budget data:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handleOpenModal = () => {
         setModalOpen(true);
@@ -63,7 +140,8 @@ export default function Budget() {
             months: {}
         };
 
-        setLineItems([...lineItems, newItem]);
+        const updatedItems = [...lineItems, newItem];
+        setLineItems(updatedItems);
         handleCloseModal();
     };
 
@@ -79,7 +157,7 @@ export default function Budget() {
 
         const numericValue = parseFloat(editValue) || 0;
 
-        setLineItems(lineItems.map(item => {
+        const updatedItems = lineItems.map(item => {
             if (item.id === editingCell.itemId) {
                 return {
                     ...item,
@@ -90,8 +168,9 @@ export default function Budget() {
                 };
             }
             return item;
-        }));
+        });
 
+        setLineItems(updatedItems);
         setEditingCell(null);
         setEditValue('');
     };
@@ -114,7 +193,7 @@ export default function Budget() {
     };
 
     const handleFrequencyChange = (itemId: string, frequency: string) => {
-        setLineItems(lineItems.map(item => {
+        const updatedItems = lineItems.map(item => {
             if (item.id === itemId) {
                 return {
                     ...item,
@@ -122,7 +201,8 @@ export default function Budget() {
                 };
             }
             return item;
-        }));
+        });
+        setLineItems(updatedItems);
         setEditingFrequency(null);
     };
 
@@ -136,6 +216,7 @@ export default function Budget() {
                     </Typography>
                     <IconButton
                         onClick={handleOpenModal}
+                        disabled={!isLoaded || !user?.id || loading}
                         sx={{
                             color: theme.palette.primary.main,
                             bgcolor: theme.palette.background.paper,
@@ -143,10 +224,16 @@ export default function Budget() {
                                 bgcolor: theme.palette.primary.main,
                                 color: theme.palette.primary.contrastText,
                             },
+                            '&:disabled': {
+                                opacity: 0.5,
+                            },
                         }}
                     >
                         <AddIcon />
                     </IconButton>
+                    {saving && (
+                        <CircularProgress size={24} sx={{ color: theme.palette.primary.main }} />
+                    )}
                 </Box>
 
                 <Paper sx={{ bgcolor: theme.palette.background.paper, overflow: 'hidden', width: '100%' }}>
