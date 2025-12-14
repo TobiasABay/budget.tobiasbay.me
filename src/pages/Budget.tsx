@@ -1,10 +1,11 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, CircularProgress } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, CircularProgress, Menu } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
@@ -36,6 +37,7 @@ export default function Budget() {
     const [editingFrequency, setEditingFrequency] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
 
@@ -108,24 +110,25 @@ export default function Budget() {
         }
     };
 
-    const handleOpenModal = () => {
+    const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
+        setMenuAnchor(event.currentTarget);
+    };
+
+    const handleCloseMenu = () => {
+        setMenuAnchor(null);
+    };
+
+    const handleOpenModal = (type: 'income' | 'expense') => {
         setModalOpen(true);
-        setSelectedType(null);
+        setSelectedType(type);
         setItemName('');
+        handleCloseMenu();
     };
 
     const handleCloseModal = () => {
         setModalOpen(false);
         setSelectedType(null);
         setItemName('');
-    };
-
-    const handleSelectIncome = () => {
-        setSelectedType('income');
-    };
-
-    const handleSelectExpense = () => {
-        setSelectedType('expense');
     };
 
     const handleCreateItem = () => {
@@ -206,6 +209,11 @@ export default function Budget() {
         setEditingFrequency(null);
     };
 
+    const handleDeleteItem = (itemId: string) => {
+        const updatedItems = lineItems.filter(item => item.id !== itemId);
+        setLineItems(updatedItems);
+    };
+
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
             <Navbar />
@@ -215,7 +223,7 @@ export default function Budget() {
                         Budget {year}
                     </Typography>
                     <IconButton
-                        onClick={handleOpenModal}
+                        onClick={handleOpenMenu}
                         disabled={!isLoaded || !user?.id || loading}
                         sx={{
                             color: theme.palette.primary.main,
@@ -231,6 +239,50 @@ export default function Budget() {
                     >
                         <AddIcon />
                     </IconButton>
+                    <Menu
+                        anchorEl={menuAnchor}
+                        open={Boolean(menuAnchor)}
+                        onClose={handleCloseMenu}
+                        anchorOrigin={{
+                            vertical: 'bottom',
+                            horizontal: 'left',
+                        }}
+                        transformOrigin={{
+                            vertical: 'top',
+                            horizontal: 'left',
+                        }}
+                        PaperProps={{
+                            sx: {
+                                bgcolor: theme.palette.background.paper,
+                                color: theme.palette.text.primary,
+                            }
+                        }}
+                    >
+                        <MenuItem
+                            onClick={() => handleOpenModal('income')}
+                            sx={{
+                                color: theme.palette.success.main,
+                                '&:hover': {
+                                    bgcolor: theme.palette.success.main,
+                                    color: theme.palette.success.contrastText,
+                                },
+                            }}
+                        >
+                            Add Income
+                        </MenuItem>
+                        <MenuItem
+                            onClick={() => handleOpenModal('expense')}
+                            sx={{
+                                color: theme.palette.error.main,
+                                '&:hover': {
+                                    bgcolor: theme.palette.error.main,
+                                    color: theme.palette.error.contrastText,
+                                },
+                            }}
+                        >
+                            Add Expense
+                        </MenuItem>
+                    </Menu>
                     {saving && (
                         <CircularProgress size={24} sx={{ color: theme.palette.primary.main }} />
                     )}
@@ -295,7 +347,26 @@ export default function Budget() {
                                                 padding: '12px 8px',
                                             }}
                                         >
-                                            {item.name}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <span style={{ flex: 1 }}>{item.name}</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteItem(item.id);
+                                                    }}
+                                                    sx={{
+                                                        color: theme.palette.error.main,
+                                                        padding: '4px',
+                                                        '&:hover': {
+                                                            bgcolor: theme.palette.error.main,
+                                                            color: theme.palette.error.contrastText,
+                                                        },
+                                                    }}
+                                                >
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
                                         </TableCell>
                                         <TableCell
                                             onClick={() => handleFrequencyClick(item.id)}
@@ -486,7 +557,26 @@ export default function Budget() {
                                                 padding: '12px 8px',
                                             }}
                                         >
-                                            {item.name}
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <span style={{ flex: 1 }}>{item.name}</span>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteItem(item.id);
+                                                    }}
+                                                    sx={{
+                                                        color: theme.palette.error.main,
+                                                        padding: '4px',
+                                                        '&:hover': {
+                                                            bgcolor: theme.palette.error.main,
+                                                            color: theme.palette.error.contrastText,
+                                                        },
+                                                    }}
+                                                >
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Box>
                                         </TableCell>
                                         <TableCell
                                             onClick={() => handleFrequencyClick(item.id)}
@@ -767,99 +857,64 @@ export default function Budget() {
                         {selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
                     </DialogTitle>
                     <DialogContent>
-                        {!selectedType ? (
-                            <>
-                                <Typography sx={{ color: theme.palette.text.secondary, marginBottom: '1rem' }}>
-                                    Choose the type of line item you want to create:
-                                </Typography>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: '300px' }}>
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleSelectIncome}
-                                        sx={{
-                                            bgcolor: theme.palette.success.main,
-                                            color: theme.palette.success.contrastText,
-                                            '&:hover': {
-                                                bgcolor: theme.palette.success.dark,
-                                            },
-                                            padding: '12px 24px',
-                                        }}
-                                    >
-                                        Income
-                                    </Button>
-                                    <Button
-                                        variant="contained"
-                                        onClick={handleSelectExpense}
-                                        sx={{
-                                            bgcolor: theme.palette.error.main,
-                                            color: theme.palette.error.contrastText,
-                                            '&:hover': {
-                                                bgcolor: theme.palette.error.dark,
-                                            },
-                                            padding: '12px 24px',
-                                        }}
-                                    >
-                                        Expense
-                                    </Button>
-                                </Box>
-                            </>
-                        ) : (
-                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: '300px', marginTop: '1rem' }}>
-                                <TextField
-                                    label="Name"
-                                    value={itemName}
-                                    onChange={(e) => setItemName(e.target.value)}
-                                    fullWidth
-                                    autoFocus
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            color: theme.palette.text.primary,
-                                            '& fieldset': {
-                                                borderColor: theme.palette.secondary.main,
-                                            },
-                                            '&:hover fieldset': {
-                                                borderColor: theme.palette.primary.main,
-                                            },
-                                            '&.Mui-focused fieldset': {
-                                                borderColor: theme.palette.primary.main,
-                                            },
-                                        },
-                                        '& .MuiInputLabel-root': {
-                                            color: theme.palette.text.secondary,
-                                            '&.Mui-focused': {
-                                                color: theme.palette.primary.main,
-                                            },
-                                        },
-                                    }}
-                                />
-                            </Box>
-                        )}
-                    </DialogContent>
-                    <DialogActions>
-                        {selectedType && (
-                            <Button
-                                onClick={() => setSelectedType(null)}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: '300px', marginTop: '1rem' }}>
+                            <TextField
+                                label="Name"
+                                value={itemName}
+                                onChange={(e) => setItemName(e.target.value)}
+                                fullWidth
+                                autoFocus
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && itemName.trim() && selectedType) {
+                                        handleCreateItem();
+                                    }
+                                }}
                                 sx={{
-                                    color: theme.palette.text.secondary,
-                                    '&:hover': {
-                                        bgcolor: theme.palette.background.default,
+                                    '& .MuiOutlinedInput-root': {
+                                        color: theme.palette.text.primary,
+                                        '& fieldset': {
+                                            borderColor: theme.palette.secondary.main,
+                                        },
+                                        '&:hover fieldset': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: theme.palette.text.secondary,
+                                        '&.Mui-focused': {
+                                            color: theme.palette.primary.main,
+                                        },
                                     },
                                 }}
-                            >
-                                Back
-                            </Button>
-                        )}
+                            />
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
                         <Button
-                            onClick={selectedType ? handleCreateItem : handleCloseModal}
-                            disabled={selectedType !== null && !itemName.trim()}
-                            variant={selectedType ? 'contained' : 'text'}
+                            onClick={handleCloseModal}
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': {
+                                    bgcolor: theme.palette.background.default,
+                                },
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleCreateItem}
+                            disabled={!selectedType || !itemName.trim()}
+                            variant="contained"
                             sx={{
                                 color: selectedType
                                     ? (selectedType === 'income' ? theme.palette.success.contrastText : theme.palette.error.contrastText)
                                     : theme.palette.text.secondary,
                                 bgcolor: selectedType
                                     ? (selectedType === 'income' ? theme.palette.success.main : theme.palette.error.main)
-                                    : 'transparent',
+                                    : theme.palette.background.default,
                                 '&:hover': {
                                     bgcolor: selectedType
                                         ? (selectedType === 'income' ? theme.palette.success.dark : theme.palette.error.dark)
@@ -871,7 +926,7 @@ export default function Budget() {
                                 },
                             }}
                         >
-                            {selectedType ? 'Create' : 'Cancel'}
+                            Create
                         </Button>
                     </DialogActions>
                 </Dialog>

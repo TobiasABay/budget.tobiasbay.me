@@ -36,3 +36,4 @@ CREATE TABLE IF NOT EXISTS budget_items (
 CREATE INDEX IF NOT EXISTS idx_budget_items_user_year ON budget_items(user_id, year);
 CREATE INDEX IF NOT EXISTS idx_budget_items_budget_id ON budget_items(budget_id);
 
+
