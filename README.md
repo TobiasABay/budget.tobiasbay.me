@@ -73,3 +73,8 @@ export default defineConfig([
 ```
 # budget.tobiasbay.me
 # budget.tobiasbay.me
+
+
+TODO:
+Aftaler med forsikring, banker etc
+Låne side

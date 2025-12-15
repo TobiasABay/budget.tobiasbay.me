@@ -26,11 +26,17 @@ CREATE TABLE IF NOT EXISTS budget_items (
   type TEXT NOT NULL,
   frequency TEXT NOT NULL,
   months TEXT NOT NULL,
+  loan_data TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE,
   UNIQUE(user_id, year, item_id)
 );
+
+-- Add loan_data column if it doesn't exist (for existing databases)
+-- This is a no-op if the column already exists
+-- Note: SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN
+-- So this needs to be run manually or handled in application code
 
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_budget_items_user_year ON budget_items(user_id, year);

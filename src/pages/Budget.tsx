@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -25,14 +26,22 @@ interface LineItem {
     amount: number;
     frequency: string;
     months: { [key: string]: number };
+    isLoan?: boolean;
+    loanTitle?: string;
+    loanStartDate?: string; // Format: "YYYY-MM-DD"
+    loanValue?: number;
 }
 
 export default function Budget() {
     const { year } = useParams<{ year: string }>();
     const { user, isLoaded } = useUser();
     const [modalOpen, setModalOpen] = useState(false);
-    const [selectedType, setSelectedType] = useState<'income' | 'expense' | null>(null);
+    const [selectedType, setSelectedType] = useState<'income' | 'expense' | 'loan' | null>(null);
     const [itemName, setItemName] = useState('');
+    const [isLoan, setIsLoan] = useState(false);
+    const [loanTitle, setLoanTitle] = useState('');
+    const [loanStartDate, setLoanStartDate] = useState('');
+    const [loanValue, setLoanValue] = useState('');
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -147,10 +156,14 @@ export default function Budget() {
         setMenuAnchor(null);
     };
 
-    const handleOpenModal = (type: 'income' | 'expense') => {
+    const handleOpenModal = (type: 'income' | 'expense' | 'loan') => {
         setModalOpen(true);
         setSelectedType(type);
         setItemName('');
+        setIsLoan(type === 'loan');
+        setLoanTitle('');
+        setLoanStartDate('');
+        setLoanValue('');
         handleCloseMenu();
     };
 
@@ -158,18 +171,43 @@ export default function Budget() {
         setModalOpen(false);
         setSelectedType(null);
         setItemName('');
+        setIsLoan(false);
+        setLoanTitle('');
+        setLoanStartDate('');
+        setLoanValue('');
     };
 
     const handleCreateItem = () => {
-        if (!itemName.trim() || !selectedType) return;
+        if (isLoan) {
+            if (!loanTitle.trim() || !loanStartDate || !loanValue) return;
+        } else {
+            if (!itemName.trim() || !selectedType) return;
+        }
+
+        let itemType: 'income' | 'expense';
+        if (isLoan) {
+            itemType = 'expense'; // Loans are tracked as expenses
+        } else if (selectedType === 'loan' || !selectedType) {
+            itemType = 'expense';
+        } else if (selectedType === 'income') {
+            itemType = 'income';
+        } else {
+            itemType = 'expense';
+        }
 
         const newItem: LineItem = {
             id: Date.now().toString(),
-            name: itemName.trim(),
-            type: selectedType,
+            name: isLoan ? loanTitle.trim() : itemName.trim(),
+            type: itemType,
             amount: 0,
             frequency: 'Monthly',
-            months: {}
+            months: {},
+            ...(isLoan && {
+                isLoan: true,
+                loanTitle: loanTitle.trim(),
+                loanStartDate: loanStartDate,
+                loanValue: parseFloat(loanValue) || 0
+            })
         };
 
         const updatedItems = [...lineItems, newItem];
@@ -317,6 +355,18 @@ export default function Budget() {
                             }}
                         >
                             Add Expense
+                        </MenuItem>
+                        <MenuItem
+                            onClick={() => handleOpenModal('loan')}
+                            sx={{
+                                color: theme.palette.info.main,
+                                '&:hover': {
+                                    bgcolor: theme.palette.info.main,
+                                    color: theme.palette.info.contrastText,
+                                },
+                            }}
+                        >
+                            Add Loan
                         </MenuItem>
                     </Menu>
                     {saving && (
@@ -591,172 +641,186 @@ export default function Budget() {
                             {/* Expense Items */}
                             {lineItems
                                 .filter(item => item.type === 'expense')
-                                .map((item) => (
-                                    <TableRow key={item.id}>
-                                        <TableCell
-                                            onClick={() => handleNameCellClick(item.id)}
-                                            sx={{
-                                                color: theme.palette.error.main,
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: '12px 8px',
-                                                cursor: 'pointer',
-                                                '&:hover': {
-                                                    bgcolor: theme.palette.background.default,
-                                                },
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <span style={{ flex: 1 }}>{item.name}</span>
-                                                {selectedItemForDelete === item.id && (
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteItem(item.id);
-                                                        }}
-                                                        sx={{
-                                                            color: theme.palette.error.main,
-                                                            padding: '4px',
-                                                            '&:hover': {
-                                                                bgcolor: theme.palette.error.main,
-                                                                color: theme.palette.error.contrastText,
-                                                            },
-                                                        }}
-                                                    >
-                                                        <DeleteIcon fontSize="small" />
-                                                    </IconButton>
+                                .map((item) => {
+                                    const isLoan = item.isLoan || false;
+                                    return (
+                                        <TableRow key={item.id}>
+                                            <TableCell
+                                                onClick={() => handleNameCellClick(item.id)}
+                                                sx={{
+                                                    color: isLoan ? theme.palette.info.main : theme.palette.error.main,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: '12px 8px',
+                                                    cursor: 'pointer',
+                                                    '&:hover': {
+                                                        bgcolor: theme.palette.background.default,
+                                                    },
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    {isLoan && (
+                                                        <AccountBalanceIcon
+                                                            sx={{
+                                                                fontSize: '1rem',
+                                                                color: theme.palette.info.main,
+                                                                opacity: 0.8
+                                                            }}
+                                                        />
+                                                    )}
+                                                    <span style={{ flex: 1 }}>
+                                                        {isLoan ? `Loan: ${item.loanTitle || item.name}` : item.name}
+                                                    </span>
+                                                    {selectedItemForDelete === item.id && (
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteItem(item.id);
+                                                            }}
+                                                            sx={{
+                                                                color: isLoan ? theme.palette.info.main : theme.palette.error.main,
+                                                                padding: '4px',
+                                                                '&:hover': {
+                                                                    bgcolor: isLoan ? theme.palette.info.main : theme.palette.error.main,
+                                                                    color: isLoan ? theme.palette.info.contrastText : theme.palette.error.contrastText,
+                                                                },
+                                                            }}
+                                                        >
+                                                            <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell
+                                                onClick={() => handleFrequencyClick(item.id)}
+                                                sx={{
+                                                    color: theme.palette.text.primary,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: '12px 8px',
+                                                    cursor: 'pointer',
+                                                    '&:hover': {
+                                                        bgcolor: theme.palette.background.default,
+                                                    },
+                                                }}
+                                            >
+                                                {editingFrequency === item.id ? (
+                                                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                                                        <Select
+                                                            value={item.frequency}
+                                                            onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
+                                                            onBlur={() => setEditingFrequency(null)}
+                                                            autoFocus
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                '& .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '& .MuiSvgIcon-root': {
+                                                                    color: theme.palette.text.primary,
+                                                                },
+                                                            }}
+                                                            MenuProps={{
+                                                                PaperProps: {
+                                                                    sx: {
+                                                                        bgcolor: theme.palette.background.paper,
+                                                                        color: theme.palette.text.primary,
+                                                                    }
+                                                                }
+                                                            }}
+                                                        >
+                                                            {FREQUENCY_OPTIONS.map((option) => (
+                                                                <MenuItem
+                                                                    key={option}
+                                                                    value={option}
+                                                                    sx={{
+                                                                        color: theme.palette.text.primary,
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.background.default,
+                                                                        },
+                                                                        '&.Mui-selected': {
+                                                                            bgcolor: theme.palette.primary.main,
+                                                                            color: theme.palette.primary.contrastText,
+                                                                            '&:hover': {
+                                                                                bgcolor: theme.palette.primary.dark,
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                >
+                                                                    {option}
+                                                                </MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
+                                                ) : (
+                                                    item.frequency
                                                 )}
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell
-                                            onClick={() => handleFrequencyClick(item.id)}
-                                            sx={{
-                                                color: theme.palette.text.primary,
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: '12px 8px',
-                                                cursor: 'pointer',
-                                                '&:hover': {
-                                                    bgcolor: theme.palette.background.default,
-                                                },
-                                            }}
-                                        >
-                                            {editingFrequency === item.id ? (
-                                                <FormControl size="small" sx={{ minWidth: 120 }}>
-                                                    <Select
-                                                        value={item.frequency}
-                                                        onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
-                                                        onBlur={() => setEditingFrequency(null)}
-                                                        autoFocus
+                                            </TableCell>
+                                            {MONTHS.map((month) => {
+                                                const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                const cellValue = item.months[month] || 0;
+
+                                                return (
+                                                    <TableCell
+                                                        key={month}
+                                                        align="center"
+                                                        onClick={() => handleCellClick(item.id, month)}
                                                         sx={{
                                                             color: theme.palette.text.primary,
-                                                            '& .MuiOutlinedInput-notchedOutline': {
-                                                                borderColor: theme.palette.primary.main,
+                                                            padding: '4px',
+                                                            fontSize: '0.875rem',
+                                                            cursor: 'pointer',
+                                                            '&:hover': {
+                                                                bgcolor: theme.palette.background.default,
                                                             },
-                                                            '&:hover .MuiOutlinedInput-notchedOutline': {
-                                                                borderColor: theme.palette.primary.main,
-                                                            },
-                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                                                                borderColor: theme.palette.primary.main,
-                                                            },
-                                                            '& .MuiSvgIcon-root': {
-                                                                color: theme.palette.text.primary,
-                                                            },
-                                                        }}
-                                                        MenuProps={{
-                                                            PaperProps: {
-                                                                sx: {
-                                                                    bgcolor: theme.palette.background.paper,
-                                                                    color: theme.palette.text.primary,
-                                                                }
-                                                            }
                                                         }}
                                                     >
-                                                        {FREQUENCY_OPTIONS.map((option) => (
-                                                            <MenuItem
-                                                                key={option}
-                                                                value={option}
+                                                        {isEditing ? (
+                                                            <TextField
+                                                                value={editValue}
+                                                                onChange={(e) => setEditValue(e.target.value)}
+                                                                onBlur={handleCellSave}
+                                                                onKeyDown={handleCellKeyPress}
+                                                                autoFocus
+                                                                type="number"
+                                                                size="small"
                                                                 sx={{
-                                                                    color: theme.palette.text.primary,
-                                                                    '&:hover': {
-                                                                        bgcolor: theme.palette.background.default,
-                                                                    },
-                                                                    '&.Mui-selected': {
-                                                                        bgcolor: theme.palette.primary.main,
-                                                                        color: theme.palette.primary.contrastText,
-                                                                        '&:hover': {
-                                                                            bgcolor: theme.palette.primary.dark,
+                                                                    width: '80px',
+                                                                    '& .MuiOutlinedInput-root': {
+                                                                        color: theme.palette.text.primary,
+                                                                        bgcolor: theme.palette.background.paper,
+                                                                        '& fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
+                                                                        },
+                                                                        '&:hover fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
+                                                                        },
+                                                                        '&.Mui-focused fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
                                                                         },
                                                                     },
                                                                 }}
-                                                            >
-                                                                {option}
-                                                            </MenuItem>
-                                                        ))}
-                                                    </Select>
-                                                </FormControl>
-                                            ) : (
-                                                item.frequency
-                                            )}
-                                        </TableCell>
-                                        {MONTHS.map((month) => {
-                                            const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                            const cellValue = item.months[month] || 0;
-
-                                            return (
-                                                <TableCell
-                                                    key={month}
-                                                    align="center"
-                                                    onClick={() => handleCellClick(item.id, month)}
-                                                    sx={{
-                                                        color: theme.palette.text.primary,
-                                                        padding: '4px',
-                                                        fontSize: '0.875rem',
-                                                        cursor: 'pointer',
-                                                        '&:hover': {
-                                                            bgcolor: theme.palette.background.default,
-                                                        },
-                                                    }}
-                                                >
-                                                    {isEditing ? (
-                                                        <TextField
-                                                            value={editValue}
-                                                            onChange={(e) => setEditValue(e.target.value)}
-                                                            onBlur={handleCellSave}
-                                                            onKeyDown={handleCellKeyPress}
-                                                            autoFocus
-                                                            type="number"
-                                                            size="small"
-                                                            sx={{
-                                                                width: '80px',
-                                                                '& .MuiOutlinedInput-root': {
-                                                                    color: theme.palette.text.primary,
-                                                                    bgcolor: theme.palette.background.paper,
-                                                                    '& fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                    '&:hover fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                    '&.Mui-focused fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                },
-                                                            }}
-                                                            inputProps={{
-                                                                style: {
-                                                                    textAlign: 'center',
-                                                                    padding: '4px 8px',
-                                                                }
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(cellValue, currency)
-                                                    )}
-                                                </TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                ))}
+                                                                inputProps={{
+                                                                    style: {
+                                                                        textAlign: 'center',
+                                                                        padding: '4px 8px',
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            formatCurrency(cellValue, currency)
+                                                        )}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
+                                    );
+                                })}
                             {/* Total Expense Row */}
                             <TableRow>
                                 <TableCell
@@ -904,42 +968,131 @@ export default function Budget() {
                     }}
                 >
                     <DialogTitle sx={{ color: theme.palette.text.primary }}>
-                        {selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
+                        {selectedType === 'loan' ? 'Create New Loan' : selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: '300px', marginTop: '1rem' }}>
-                            <TextField
-                                label="Name"
-                                value={itemName}
-                                onChange={(e) => setItemName(e.target.value)}
-                                fullWidth
-                                autoFocus
-                                onKeyPress={(e) => {
-                                    if (e.key === 'Enter' && itemName.trim() && selectedType) {
-                                        handleCreateItem();
-                                    }
-                                }}
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        color: theme.palette.text.primary,
-                                        '& fieldset': {
-                                            borderColor: theme.palette.secondary.main,
+                            {isLoan ? (
+                                <>
+                                    <TextField
+                                        label="Loan Title"
+                                        value={loanTitle}
+                                        onChange={(e) => setLoanTitle(e.target.value)}
+                                        fullWidth
+                                        autoFocus
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Start Date"
+                                        type="date"
+                                        value={loanStartDate}
+                                        onChange={(e) => setLoanStartDate(e.target.value)}
+                                        fullWidth
+                                        InputLabelProps={{
+                                            shrink: true,
+                                        }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Loan Value"
+                                        type="number"
+                                        value={loanValue}
+                                        onChange={(e) => setLoanValue(e.target.value)}
+                                        fullWidth
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                </>
+                            ) : (
+                                <TextField
+                                    label="Name"
+                                    value={itemName}
+                                    onChange={(e) => setItemName(e.target.value)}
+                                    fullWidth
+                                    autoFocus
+                                    onKeyPress={(e) => {
+                                        if (e.key === 'Enter' && itemName.trim() && selectedType) {
+                                            handleCreateItem();
+                                        }
+                                    }}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            color: theme.palette.text.primary,
+                                            '& fieldset': {
+                                                borderColor: theme.palette.secondary.main,
+                                            },
+                                            '&:hover fieldset': {
+                                                borderColor: theme.palette.primary.main,
+                                            },
+                                            '&.Mui-focused fieldset': {
+                                                borderColor: theme.palette.primary.main,
+                                            },
                                         },
-                                        '&:hover fieldset': {
-                                            borderColor: theme.palette.primary.main,
+                                        '& .MuiInputLabel-root': {
+                                            color: theme.palette.text.secondary,
+                                            '&.Mui-focused': {
+                                                color: theme.palette.primary.main,
+                                            },
                                         },
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                    },
-                                    '& .MuiInputLabel-root': {
-                                        color: theme.palette.text.secondary,
-                                        '&.Mui-focused': {
-                                            color: theme.palette.primary.main,
-                                        },
-                                    },
-                                }}
-                            />
+                                    }}
+                                />
+                            )}
                         </Box>
                     </DialogContent>
                     <DialogActions>
@@ -956,19 +1109,25 @@ export default function Budget() {
                         </Button>
                         <Button
                             onClick={handleCreateItem}
-                            disabled={!selectedType || !itemName.trim()}
+                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : (!selectedType || !itemName.trim())}
                             variant="contained"
                             sx={{
-                                color: selectedType
-                                    ? (selectedType === 'income' ? theme.palette.success.contrastText : theme.palette.error.contrastText)
-                                    : theme.palette.text.secondary,
-                                bgcolor: selectedType
-                                    ? (selectedType === 'income' ? theme.palette.success.main : theme.palette.error.main)
-                                    : theme.palette.background.default,
-                                '&:hover': {
-                                    bgcolor: selectedType
-                                        ? (selectedType === 'income' ? theme.palette.success.dark : theme.palette.error.dark)
+                                color: isLoan
+                                    ? theme.palette.info.contrastText
+                                    : selectedType
+                                        ? (selectedType === 'income' ? theme.palette.success.contrastText : theme.palette.error.contrastText)
+                                        : theme.palette.text.secondary,
+                                bgcolor: isLoan
+                                    ? theme.palette.info.main
+                                    : selectedType
+                                        ? (selectedType === 'income' ? theme.palette.success.main : theme.palette.error.main)
                                         : theme.palette.background.default,
+                                '&:hover': {
+                                    bgcolor: isLoan
+                                        ? theme.palette.info.dark
+                                        : selectedType
+                                            ? (selectedType === 'income' ? theme.palette.success.dark : theme.palette.error.dark)
+                                            : theme.palette.background.default,
                                 },
                                 '&:disabled': {
                                     bgcolor: theme.palette.background.default,

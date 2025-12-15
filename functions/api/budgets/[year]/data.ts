@@ -15,6 +15,10 @@ interface BudgetItem {
   amount: number;
   frequency: string;
   months: { [key: string]: number };
+  isLoan?: boolean;
+  loanTitle?: string;
+  loanStartDate?: string;
+  loanValue?: number;
 }
 
 // CORS headers
@@ -86,19 +90,52 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (request.method === 'GET') {
-      const result = await env.budget_db
-        .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
-        .bind(userId, year)
-        .all();
+      // Try to select with loan_data, fallback if column doesn't exist
+      let result;
+      try {
+        result = await env.budget_db
+          .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+          .bind(userId, year)
+          .all();
+      } catch (e: any) {
+        // If loan_data column doesn't exist, select without it
+        if (e?.message?.includes('no such column: loan_data') || e?.message?.includes('loan_data')) {
+          result = await env.budget_db
+            .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
+            .bind(userId, year)
+            .all();
+        } else {
+          throw e;
+        }
+      }
 
-      const items: BudgetItem[] = result.results.map((row: any) => ({
-        id: row.item_id as string,
-        name: row.name as string,
-        type: row.type as 'income' | 'expense',
-        amount: 0,
-        frequency: row.frequency as string,
-        months: JSON.parse(row.months as string || '{}'),
-      }));
+      const items: BudgetItem[] = result.results.map((row: any) => {
+        const item: BudgetItem = {
+          id: row.item_id as string,
+          name: row.name as string,
+          type: row.type as 'income' | 'expense',
+          amount: 0,
+          frequency: row.frequency as string,
+          months: JSON.parse(row.months as string || '{}'),
+        };
+
+        // Parse loan data if it exists
+        if (row.loan_data) {
+          try {
+            const loanData = JSON.parse(row.loan_data as string);
+            if (loanData.isLoan) {
+              item.isLoan = loanData.isLoan;
+              item.loanTitle = loanData.loanTitle;
+              item.loanStartDate = loanData.loanStartDate;
+              item.loanValue = loanData.loanValue;
+            }
+          } catch (e) {
+            // Ignore parse errors for loan_data
+          }
+        }
+
+        return item;
+      });
 
       return new Response(JSON.stringify(items), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -123,19 +160,51 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
       // Insert new items
       for (const item of body.items) {
-        await env.budget_db
-          .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(
-            budgetId,
-            userId,
-            year,
-            item.id,
-            item.name,
-            item.type,
-            item.frequency,
-            JSON.stringify(item.months)
-          )
-          .run();
+        // Prepare loan data as JSON if it's a loan
+        const loanData = item.isLoan ? JSON.stringify({
+          isLoan: item.isLoan,
+          loanTitle: item.loanTitle || null,
+          loanStartDate: item.loanStartDate || null,
+          loanValue: item.loanValue || null,
+        }) : null;
+
+        // Try to insert with loan_data, fallback if column doesn't exist
+        try {
+          await env.budget_db
+            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(
+              budgetId,
+              userId,
+              year,
+              item.id,
+              item.name,
+              item.type,
+              item.frequency,
+              JSON.stringify(item.months),
+              loanData
+            )
+            .run();
+        } catch (e: any) {
+          // If loan_data column doesn't exist, insert without it
+          // Note: Loan data will be lost until migration is run
+          if (e?.message?.includes('no such column: loan_data') || e?.message?.includes('loan_data')) {
+            await env.budget_db
+              .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(
+                budgetId,
+                userId,
+                year,
+                item.id,
+                item.name,
+                item.type,
+                item.frequency,
+                JSON.stringify(item.months)
+              )
+              .run();
+          } else {
+            throw e;
+          }
+        }
       }
 
       return new Response(JSON.stringify({ success: true }), {
