@@ -114,6 +114,12 @@ export default function Budget() {
 
             if (response.ok) {
                 const items = await response.json();
+                // Debug: Log loan items after loading
+                const loanItems = items.filter((item: LineItem) => item.isLoan);
+                if (loanItems.length > 0) {
+                } else {
+                    console.log('No loan items found in loaded data. All items:', items);
+                }
                 setLineItems(items);
             }
         } catch (error) {
@@ -638,17 +644,16 @@ export default function Budget() {
                                     }}
                                 />
                             </TableRow>
-                            {/* Expense Items */}
+                            {/* Regular Expense Items */}
                             {lineItems
-                                .filter(item => item.type === 'expense')
+                                .filter(item => item.type === 'expense' && !item.isLoan)
                                 .map((item) => {
-                                    const isLoan = item.isLoan || false;
                                     return (
                                         <TableRow key={item.id}>
                                             <TableCell
                                                 onClick={() => handleNameCellClick(item.id)}
                                                 sx={{
-                                                    color: isLoan ? theme.palette.info.main : theme.palette.error.main,
+                                                    color: theme.palette.error.main,
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                     padding: '12px 8px',
                                                     cursor: 'pointer',
@@ -658,17 +663,8 @@ export default function Budget() {
                                                 }}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    {isLoan && (
-                                                        <AccountBalanceIcon
-                                                            sx={{
-                                                                fontSize: '1rem',
-                                                                color: theme.palette.info.main,
-                                                                opacity: 0.8
-                                                            }}
-                                                        />
-                                                    )}
                                                     <span style={{ flex: 1 }}>
-                                                        {isLoan ? `Loan: ${item.loanTitle || item.name}` : item.name}
+                                                        {item.name}
                                                     </span>
                                                     {selectedItemForDelete === item.id && (
                                                         <IconButton
@@ -678,11 +674,191 @@ export default function Budget() {
                                                                 handleDeleteItem(item.id);
                                                             }}
                                                             sx={{
-                                                                color: isLoan ? theme.palette.info.main : theme.palette.error.main,
+                                                                color: theme.palette.error.main,
                                                                 padding: '4px',
                                                                 '&:hover': {
-                                                                    bgcolor: isLoan ? theme.palette.info.main : theme.palette.error.main,
-                                                                    color: isLoan ? theme.palette.info.contrastText : theme.palette.error.contrastText,
+                                                                    bgcolor: theme.palette.error.main,
+                                                                    color: theme.palette.error.contrastText,
+                                                                },
+                                                            }}
+                                                        >
+                                                            <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell
+                                                onClick={() => handleFrequencyClick(item.id)}
+                                                sx={{
+                                                    color: theme.palette.text.primary,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: '12px 8px',
+                                                    cursor: 'pointer',
+                                                    '&:hover': {
+                                                        bgcolor: theme.palette.background.default,
+                                                    },
+                                                }}
+                                            >
+                                                {editingFrequency === item.id ? (
+                                                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                                                        <Select
+                                                            value={item.frequency}
+                                                            onChange={(e) => handleFrequencyChange(item.id, e.target.value)}
+                                                            onBlur={() => setEditingFrequency(null)}
+                                                            autoFocus
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                '& .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.palette.primary.main,
+                                                                },
+                                                                '& .MuiSvgIcon-root': {
+                                                                    color: theme.palette.text.primary,
+                                                                },
+                                                            }}
+                                                            MenuProps={{
+                                                                PaperProps: {
+                                                                    sx: {
+                                                                        bgcolor: theme.palette.background.paper,
+                                                                        color: theme.palette.text.primary,
+                                                                    }
+                                                                }
+                                                            }}
+                                                        >
+                                                            {FREQUENCY_OPTIONS.map((option) => (
+                                                                <MenuItem
+                                                                    key={option}
+                                                                    value={option}
+                                                                    sx={{
+                                                                        color: theme.palette.text.primary,
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.background.default,
+                                                                        },
+                                                                        '&.Mui-selected': {
+                                                                            bgcolor: theme.palette.primary.main,
+                                                                            color: theme.palette.primary.contrastText,
+                                                                            '&:hover': {
+                                                                                bgcolor: theme.palette.primary.dark,
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                >
+                                                                    {option}
+                                                                </MenuItem>
+                                                            ))}
+                                                        </Select>
+                                                    </FormControl>
+                                                ) : (
+                                                    item.frequency
+                                                )}
+                                            </TableCell>
+                                            {MONTHS.map((month) => {
+                                                const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                const cellValue = item.months[month] || 0;
+
+                                                return (
+                                                    <TableCell
+                                                        key={month}
+                                                        align="center"
+                                                        onClick={() => handleCellClick(item.id, month)}
+                                                        sx={{
+                                                            color: theme.palette.text.primary,
+                                                            padding: '4px',
+                                                            fontSize: '0.875rem',
+                                                            cursor: 'pointer',
+                                                            '&:hover': {
+                                                                bgcolor: theme.palette.background.default,
+                                                            },
+                                                        }}
+                                                    >
+                                                        {isEditing ? (
+                                                            <TextField
+                                                                value={editValue}
+                                                                onChange={(e) => setEditValue(e.target.value)}
+                                                                onBlur={handleCellSave}
+                                                                onKeyDown={handleCellKeyPress}
+                                                                autoFocus
+                                                                type="number"
+                                                                size="small"
+                                                                sx={{
+                                                                    width: '80px',
+                                                                    '& .MuiOutlinedInput-root': {
+                                                                        color: theme.palette.text.primary,
+                                                                        bgcolor: theme.palette.background.paper,
+                                                                        '& fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
+                                                                        },
+                                                                        '&:hover fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
+                                                                        },
+                                                                        '&.Mui-focused fieldset': {
+                                                                            borderColor: theme.palette.primary.main,
+                                                                        },
+                                                                    },
+                                                                }}
+                                                                inputProps={{
+                                                                    style: {
+                                                                        textAlign: 'center',
+                                                                        padding: '4px 8px',
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            formatCurrency(cellValue, currency)
+                                                        )}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
+                                    );
+                                })}
+                            {/* Loan Items (at bottom of expenses) */}
+                            {lineItems
+                                .filter(item => item.type === 'expense' && item.isLoan)
+                                .map((item) => {
+                                    return (
+                                        <TableRow key={item.id}>
+                                            <TableCell
+                                                onClick={() => handleNameCellClick(item.id)}
+                                                sx={{
+                                                    color: theme.palette.info.main,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: '12px 8px',
+                                                    cursor: 'pointer',
+                                                    '&:hover': {
+                                                        bgcolor: theme.palette.background.default,
+                                                    },
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <AccountBalanceIcon
+                                                        sx={{
+                                                            fontSize: '1rem',
+                                                            color: theme.palette.info.main,
+                                                            opacity: 0.8
+                                                        }}
+                                                    />
+                                                    <span style={{ flex: 1 }}>
+                                                        Loan: {item.loanTitle || item.name}
+                                                    </span>
+                                                    {selectedItemForDelete === item.id && (
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteItem(item.id);
+                                                            }}
+                                                            sx={{
+                                                                color: theme.palette.info.main,
+                                                                padding: '4px',
+                                                                '&:hover': {
+                                                                    bgcolor: theme.palette.info.main,
+                                                                    color: theme.palette.info.contrastText,
                                                                 },
                                                             }}
                                                         >

@@ -36,6 +36,29 @@ export const onRequestOptions: PagesFunction<Env> = async () => {
   });
 };
 
+// Helper function to check if loan_data column exists
+// Since we know the column exists (from migration), we'll always try to use it
+// and fall back gracefully if needed
+async function checkLoanDataColumnExists(env: Env): Promise<boolean> {
+  try {
+    // Try a simple query to see if the column exists
+    const testResult = await env.budget_db
+      .prepare("SELECT loan_data FROM budget_items LIMIT 1")
+      .first();
+    // If we get here without error, column exists
+    return true;
+  } catch (e: any) {
+    const errorMsg = e?.message || String(e);
+    if (errorMsg.includes('no such column: loan_data') || errorMsg.includes('loan_data')) {
+      console.log('loan_data column does not exist');
+      return false;
+    }
+    // Other errors - assume column exists (safer)
+    console.log('Assuming loan_data column exists (error was:', errorMsg, ')');
+    return true;
+  }
+}
+
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { request, env, params } = context;
   const year = decodeURIComponent(params.year as string);
@@ -72,6 +95,19 @@ export const onRequest: PagesFunction<Env> = async (context) => {
       });
     }
 
+    // Check if loan_data column exists
+    // Since we know the column exists (user confirmed), we'll try to use it
+    // and fall back gracefully if needed
+    let hasLoanDataColumn = true; // Default to true since column exists
+    try {
+      const checkResult = await checkLoanDataColumnExists(env);
+      hasLoanDataColumn = checkResult;
+      console.log('loan_data column check result:', hasLoanDataColumn);
+    } catch (e) {
+      console.error('Error checking loan_data column, assuming it exists:', e);
+      hasLoanDataColumn = true; // Assume it exists
+    }
+
     // Get or create budget record
     let budgetResult = await env.budget_db
       .prepare('SELECT id FROM budgets WHERE user_id = ? AND year = ?')
@@ -90,7 +126,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (request.method === 'GET') {
-      // Try to select with loan_data, fallback if column doesn't exist
+      // Always try to select loan_data (column exists)
       let result;
       try {
         result = await env.budget_db
@@ -98,8 +134,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           .bind(userId, year)
           .all();
       } catch (e: any) {
-        // If loan_data column doesn't exist, select without it
-        if (e?.message?.includes('no such column: loan_data') || e?.message?.includes('loan_data')) {
+        // If column doesn't exist, fall back to query without it
+        const errorMsg = e?.message || String(e);
+        if (errorMsg.includes('no such column: loan_data')) {
+          console.log('loan_data column not found, using fallback query');
           result = await env.budget_db
             .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
             .bind(userId, year)
@@ -119,18 +157,39 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           months: JSON.parse(row.months as string || '{}'),
         };
 
-        // Parse loan data if it exists
-        if (row.loan_data) {
+        // Parse loan data if it exists (check for both null and undefined)
+        // Check if loan_data column exists in the row (might be undefined if column wasn't selected)
+        const hasLoanDataColumn = 'loan_data' in row;
+        console.log('Loading item:', item.id, 'has loan_data column:', hasLoanDataColumn, 'loan_data value:', row.loan_data, 'type:', typeof row.loan_data);
+
+        if (hasLoanDataColumn && row.loan_data !== null && row.loan_data !== undefined && row.loan_data !== '') {
           try {
             const loanData = JSON.parse(row.loan_data as string);
-            if (loanData.isLoan) {
+            console.log('Parsed loan_data for item', item.id, ':', loanData);
+            if (loanData && loanData.isLoan) {
               item.isLoan = loanData.isLoan;
-              item.loanTitle = loanData.loanTitle;
-              item.loanStartDate = loanData.loanStartDate;
-              item.loanValue = loanData.loanValue;
+              item.loanTitle = loanData.loanTitle || null;
+              item.loanStartDate = loanData.loanStartDate || null;
+              item.loanValue = loanData.loanValue || null;
+              console.log('Successfully loaded loan item:', {
+                id: item.id,
+                name: item.name,
+                loanTitle: item.loanTitle,
+                loanStartDate: item.loanStartDate,
+                loanValue: item.loanValue
+              });
+            } else {
+              console.log('loan_data exists but isLoan is false or missing for item', item.id);
             }
           } catch (e) {
             // Ignore parse errors for loan_data
+            console.error('Error parsing loan_data for item', item.id, ':', e, 'Raw value:', row.loan_data);
+          }
+        } else {
+          if (!hasLoanDataColumn) {
+            console.log('Item', item.id, 'does not have loan_data column in result');
+          } else {
+            console.log('Item', item.id, 'has loan_data column but value is null/undefined/empty:', row.loan_data);
           }
         }
 
@@ -152,6 +211,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         });
       }
 
+      // Debug: Log all items to see what we're receiving
+      console.log('Received items to save:', JSON.stringify(body.items, null, 2));
+
       // Delete existing items
       await env.budget_db
         .prepare('DELETE FROM budget_items WHERE user_id = ? AND year = ?')
@@ -168,9 +230,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           loanValue: item.loanValue || null,
         }) : null;
 
-        // Try to insert with loan_data, fallback if column doesn't exist
+
+        // Always try to insert with loan_data (column exists)
         try {
-          await env.budget_db
+          const insertResult = await env.budget_db
             .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(
               budgetId,
@@ -184,10 +247,20 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               loanData
             )
             .run();
+
+          // Verify what was actually saved
+          if (item.isLoan) {
+            const verifyResult = await env.budget_db
+              .prepare('SELECT loan_data FROM budget_items WHERE item_id = ? AND user_id = ? AND year = ?')
+              .bind(item.id, userId, year)
+              .first();
+            console.log('Verified saved loan_data for item', item.id, ':', verifyResult);
+          }
         } catch (e: any) {
-          // If loan_data column doesn't exist, insert without it
-          // Note: Loan data will be lost until migration is run
-          if (e?.message?.includes('no such column: loan_data') || e?.message?.includes('loan_data')) {
+          // If column doesn't exist, fall back to insert without it
+          const errorMsg = e?.message || String(e);
+          if (errorMsg.includes('no such column: loan_data')) {
+            console.warn(`Loan item "${item.name}" cannot be saved with loan data. Column doesn't exist.`);
             await env.budget_db
               .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
               .bind(
@@ -202,6 +275,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               )
               .run();
           } else {
+            console.error('Error inserting item:', e, 'Item:', item);
             throw e;
           }
         }

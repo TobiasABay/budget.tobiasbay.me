@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
+import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
@@ -96,6 +96,8 @@ export default function SettingsPage() {
   const [creating, setCreating] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
+  const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -168,13 +170,25 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteBudget = async (year: string) => {
-    if (!user?.id) return;
+  const handleDeleteClick = (year: string) => {
+    setBudgetToDelete(year);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setBudgetToDelete(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!user?.id || !budgetToDelete) return;
 
     setError('');
+    setDeleteDialogOpen(false);
     try {
-      const updatedBudgets = await deleteBudget(user.id, year);
+      const updatedBudgets = await deleteBudget(user.id, budgetToDelete);
       setBudgets(updatedBudgets);
+      setBudgetToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete budget');
       console.error('Error deleting budget:', err);
@@ -190,6 +204,10 @@ export default function SettingsPage() {
     if (selectedCurrency) {
       setCurrency(selectedCurrency);
       setStoredCurrency(currencyCode);
+    } else if (currencyCode === 'NONE') {
+      // Handle NONE currency option
+      setCurrency({ code: 'NONE', symbol: '', name: 'No Currency' });
+      setStoredCurrency('NONE');
     }
   };
 
@@ -268,7 +286,9 @@ export default function SettingsPage() {
                     },
                   }}
                 >
-                  {curr.symbol} {curr.name} ({curr.code})
+                  {curr.code === 'NONE'
+                    ? curr.name
+                    : `${curr.symbol} ${curr.name} (${curr.code})`}
                 </MenuItem>
               ))}
             </Select>
@@ -382,7 +402,10 @@ export default function SettingsPage() {
                     secondaryAction={
                       <IconButton
                         edge="end"
-                        onClick={() => handleDeleteBudget(year)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(year);
+                        }}
                         sx={{
                           color: theme.palette.error.main,
                           '&:hover': {
@@ -412,6 +435,54 @@ export default function SettingsPage() {
             </List>
           )}
         </Paper>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={handleDeleteCancel}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.background.paper,
+              color: theme.palette.text.primary,
+            }
+          }}
+        >
+          <DialogTitle sx={{ color: theme.palette.text.primary }}>
+            Delete Budget
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ color: theme.palette.text.secondary }}>
+              Are you sure you want to delete Budget {budgetToDelete}? This action cannot be undone and will delete all associated data.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={handleDeleteCancel}
+              sx={{
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  bgcolor: theme.palette.background.default,
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteConfirm}
+              variant="contained"
+              color="error"
+              sx={{
+                bgcolor: theme.palette.error.main,
+                color: theme.palette.error.contrastText,
+                '&:hover': {
+                  bgcolor: theme.palette.error.dark,
+                },
+              }}
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Box>
   );

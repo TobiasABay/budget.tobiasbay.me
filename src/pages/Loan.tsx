@@ -269,7 +269,7 @@ export default function Loan() {
 
     const loanItems = getLoanItems();
     const loanNames = loanItems.map(item => item.loanTitle || item.name).filter(Boolean) as string[];
-    const currencyText = `Figures in ${currency.code}`;
+    const currencyText = currency.code === 'NONE' ? 'Figures' : `Figures in ${currency.code}`;
 
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">

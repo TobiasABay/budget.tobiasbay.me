@@ -7,6 +7,7 @@ export interface Currency {
 }
 
 export const CURRENCIES: Currency[] = [
+  { code: 'NONE', symbol: '', name: 'No Currency' },
   { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
@@ -38,7 +39,16 @@ export function getStoredCurrency(): Currency {
   }
 
   const currency = CURRENCIES.find(c => c.code === stored);
-  return currency || getDefaultCurrency();
+  if (currency) {
+    return currency;
+  }
+
+  // If stored value is 'NONE' but not in CURRENCIES (shouldn't happen), return NONE currency
+  if (stored === 'NONE') {
+    return { code: 'NONE', symbol: '', name: 'No Currency' };
+  }
+
+  return getDefaultCurrency();
 }
 
 export function setStoredCurrency(currencyCode: string): void {
@@ -47,7 +57,7 @@ export function setStoredCurrency(currencyCode: string): void {
   }
 
   const currency = CURRENCIES.find(c => c.code === currencyCode);
-  if (currency) {
+  if (currency || currencyCode === 'NONE') {
     localStorage.setItem(CURRENCY_STORAGE_KEY, currencyCode);
   }
 }
@@ -57,11 +67,22 @@ export function formatCurrency(amount: number, currency: Currency): string {
     return '';
   }
 
+  // Check if the number is a whole number (no decimal part)
+  const isWholeNumber = amount % 1 === 0;
+
+  // For no currency, show number without decimals if it's a whole number
+  if (currency.code === 'NONE') {
+    return isWholeNumber ? amount.toString() : amount.toFixed(2);
+  }
+
   // For JPY, don't show decimals
   if (currency.code === 'JPY') {
     return `${currency.symbol}${Math.round(amount).toLocaleString()}`;
   }
 
-  // For other currencies, show 2 decimal places
+  // For other currencies, show without decimals if whole number, otherwise 2 decimal places
+  if (isWholeNumber) {
+    return `${currency.symbol}${Math.round(amount).toLocaleString()}`;
+  }
   return `${currency.symbol}${amount.toFixed(2)}`;
 }
