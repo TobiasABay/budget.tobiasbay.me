@@ -1346,6 +1346,7 @@ export default function Budget() {
                                                                         staticExpenseDate: editStaticExpenseDate,
                                                                         staticExpensePrice: price,
                                                                         months: newMonths,
+                                                                        isStaticExpense: true, // Explicitly preserve the flag
                                                                     };
                                                                 }
                                                                 return li;
