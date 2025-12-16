@@ -22,6 +22,7 @@ interface BudgetItem {
   isStaticExpense?: boolean;
   staticExpenseDate?: string;
   staticExpensePrice?: number;
+  staticExpenseDescription?: string;
 }
 
 // CORS headers
@@ -206,6 +207,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               item.isStaticExpense = staticExpenseData.isStaticExpense;
               item.staticExpenseDate = staticExpenseData.staticExpenseDate || null;
               item.staticExpensePrice = staticExpenseData.staticExpensePrice || null;
+              item.staticExpenseDescription = staticExpenseData.staticExpenseDescription || null;
             }
           } catch (e) {
             // Ignore parse errors for static_expense_data
@@ -255,6 +257,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           isStaticExpense: item.isStaticExpense,
           staticExpenseDate: item.staticExpenseDate || null,
           staticExpensePrice: item.staticExpensePrice || null,
+          staticExpenseDescription: item.staticExpenseDescription || null,
         }) : null;
 
         // Always try to insert with loan_data and static_expense_data (columns exist)
