@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS budget_items (
   frequency TEXT NOT NULL,
   months TEXT NOT NULL,
   loan_data TEXT,
+  static_expense_data TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE,

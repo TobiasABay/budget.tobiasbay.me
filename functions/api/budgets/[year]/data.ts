@@ -19,6 +19,9 @@ interface BudgetItem {
   loanTitle?: string;
   loanStartDate?: string;
   loanValue?: number;
+  isStaticExpense?: boolean;
+  staticExpenseDate?: string;
+  staticExpensePrice?: number;
 }
 
 // CORS headers
@@ -126,17 +129,36 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (request.method === 'GET') {
-      // Always try to select loan_data (column exists)
+      // Always try to select loan_data and static_expense_data (columns exist)
       let result;
       try {
         result = await env.budget_db
-          .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+          .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
           .bind(userId, year)
           .all();
       } catch (e: any) {
-        // If column doesn't exist, fall back to query without it
+        // If columns don't exist, try with just loan_data
         const errorMsg = e?.message || String(e);
-        if (errorMsg.includes('no such column: loan_data')) {
+        if (errorMsg.includes('no such column: static_expense_data')) {
+          try {
+            result = await env.budget_db
+              .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+              .bind(userId, year)
+              .all();
+          } catch (e2: any) {
+            // If loan_data also doesn't exist, fall back to basic query
+            const errorMsg2 = e2?.message || String(e2);
+            if (errorMsg2.includes('no such column: loan_data')) {
+              console.log('loan_data column not found, using fallback query');
+              result = await env.budget_db
+                .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
+                .bind(userId, year)
+                .all();
+            } else {
+              throw e2;
+            }
+          }
+        } else if (errorMsg.includes('no such column: loan_data')) {
           console.log('loan_data column not found, using fallback query');
           result = await env.budget_db
             .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
@@ -160,36 +182,34 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         // Parse loan data if it exists (check for both null and undefined)
         // Check if loan_data column exists in the row (might be undefined if column wasn't selected)
         const hasLoanDataColumn = 'loan_data' in row;
-        console.log('Loading item:', item.id, 'has loan_data column:', hasLoanDataColumn, 'loan_data value:', row.loan_data, 'type:', typeof row.loan_data);
-
         if (hasLoanDataColumn && row.loan_data !== null && row.loan_data !== undefined && row.loan_data !== '') {
           try {
             const loanData = JSON.parse(row.loan_data as string);
-            console.log('Parsed loan_data for item', item.id, ':', loanData);
             if (loanData && loanData.isLoan) {
               item.isLoan = loanData.isLoan;
               item.loanTitle = loanData.loanTitle || null;
               item.loanStartDate = loanData.loanStartDate || null;
               item.loanValue = loanData.loanValue || null;
-              console.log('Successfully loaded loan item:', {
-                id: item.id,
-                name: item.name,
-                loanTitle: item.loanTitle,
-                loanStartDate: item.loanStartDate,
-                loanValue: item.loanValue
-              });
-            } else {
-              console.log('loan_data exists but isLoan is false or missing for item', item.id);
             }
           } catch (e) {
             // Ignore parse errors for loan_data
-            console.error('Error parsing loan_data for item', item.id, ':', e, 'Raw value:', row.loan_data);
+            console.error('Error parsing loan_data for item', item.id, ':', e);
           }
-        } else {
-          if (!hasLoanDataColumn) {
-            console.log('Item', item.id, 'does not have loan_data column in result');
-          } else {
-            console.log('Item', item.id, 'has loan_data column but value is null/undefined/empty:', row.loan_data);
+        }
+
+        // Parse static expense data if it exists
+        const hasStaticExpenseDataColumn = 'static_expense_data' in row;
+        if (hasStaticExpenseDataColumn && row.static_expense_data !== null && row.static_expense_data !== undefined && row.static_expense_data !== '') {
+          try {
+            const staticExpenseData = JSON.parse(row.static_expense_data as string);
+            if (staticExpenseData && staticExpenseData.isStaticExpense) {
+              item.isStaticExpense = staticExpenseData.isStaticExpense;
+              item.staticExpenseDate = staticExpenseData.staticExpenseDate || null;
+              item.staticExpensePrice = staticExpenseData.staticExpensePrice || null;
+            }
+          } catch (e) {
+            // Ignore parse errors for static_expense_data
+            console.error('Error parsing static_expense_data for item', item.id, ':', e);
           }
         }
 
@@ -230,11 +250,17 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           loanValue: item.loanValue || null,
         }) : null;
 
+        // Prepare static expense data as JSON if it's a static expense
+        const staticExpenseData = item.isStaticExpense ? JSON.stringify({
+          isStaticExpense: item.isStaticExpense,
+          staticExpenseDate: item.staticExpenseDate || null,
+          staticExpensePrice: item.staticExpensePrice || null,
+        }) : null;
 
-        // Always try to insert with loan_data (column exists)
+        // Always try to insert with loan_data and static_expense_data (columns exist)
         try {
-          const insertResult = await env.budget_db
-            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          await env.budget_db
+            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(
               budgetId,
               userId,
@@ -244,22 +270,53 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               item.type,
               item.frequency,
               JSON.stringify(item.months),
-              loanData
+              loanData,
+              staticExpenseData
             )
             .run();
-
-          // Verify what was actually saved
-          if (item.isLoan) {
-            const verifyResult = await env.budget_db
-              .prepare('SELECT loan_data FROM budget_items WHERE item_id = ? AND user_id = ? AND year = ?')
-              .bind(item.id, userId, year)
-              .first();
-            console.log('Verified saved loan_data for item', item.id, ':', verifyResult);
-          }
         } catch (e: any) {
-          // If column doesn't exist, fall back to insert without it
+          // If static_expense_data column doesn't exist, try with just loan_data
           const errorMsg = e?.message || String(e);
-          if (errorMsg.includes('no such column: loan_data')) {
+          if (errorMsg.includes('no such column: static_expense_data')) {
+            try {
+              await env.budget_db
+                .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(
+                  budgetId,
+                  userId,
+                  year,
+                  item.id,
+                  item.name,
+                  item.type,
+                  item.frequency,
+                  JSON.stringify(item.months),
+                  loanData
+                )
+                .run();
+            } catch (e2: any) {
+              // If loan_data also doesn't exist, fall back to insert without it
+              const errorMsg2 = e2?.message || String(e2);
+              if (errorMsg2.includes('no such column: loan_data')) {
+                console.warn(`Item "${item.name}" cannot be saved with loan/static expense data. Columns don't exist.`);
+                await env.budget_db
+                  .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                  .bind(
+                    budgetId,
+                    userId,
+                    year,
+                    item.id,
+                    item.name,
+                    item.type,
+                    item.frequency,
+                    JSON.stringify(item.months)
+                  )
+                  .run();
+              } else {
+                console.error('Error inserting item:', e2, 'Item:', item);
+                throw e2;
+              }
+            }
+          } else if (errorMsg.includes('no such column: loan_data')) {
             console.warn(`Loan item "${item.name}" cannot be saved with loan data. Column doesn't exist.`);
             await env.budget_db
               .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
