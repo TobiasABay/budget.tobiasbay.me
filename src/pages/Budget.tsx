@@ -1269,7 +1269,7 @@ export default function Budget() {
                                 .sort((a, b) => {
                                     const dateA = a.staticExpenseDate || '';
                                     const dateB = b.staticExpenseDate || '';
-                                    return dateA.localeCompare(dateB);
+                                    return dateB.localeCompare(dateA); // Sort descending (latest first)
                                 })
                                 .map((item) => {
                                     const isEditing = editingStaticExpense === item.id;
@@ -1278,10 +1278,10 @@ export default function Budget() {
                                             key={item.id}
                                             sx={{
                                                 bgcolor: theme.palette.background.default,
-                                                padding: '1rem',
+                                                padding: '0.75rem 1rem',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                gap: 2,
+                                                gap: 1.5,
                                                 '&:hover': {
                                                     bgcolor: theme.palette.background.paper,
                                                 },
@@ -1416,20 +1416,29 @@ export default function Budget() {
                                                 </Box>
                                             ) : (
                                                 <>
-                                                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                        <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold' }}>
-                                                            {item.name}
-                                                        </Typography>
-                                                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                            {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
-                                                        </Typography>
+                                                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.25, minWidth: 0 }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                                            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold', fontSize: '0.95rem' }}>
+                                                                {item.name}
+                                                            </Typography>
+                                                            {item.staticExpenseDate && (
+                                                                <>
+                                                                    <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.8rem' }}>
+                                                                        {new Date(item.staticExpenseDate).toLocaleDateString()}
+                                                                    </Typography>
+                                                                    <Typography sx={{ color: theme.palette.warning.main, fontSize: '0.75rem', fontWeight: 'medium' }}>
+                                                                        {MONTHS[new Date(item.staticExpenseDate).getMonth()]}
+                                                                    </Typography>
+                                                                </>
+                                                            )}
+                                                        </Box>
                                                         {item.staticExpenseDescription && (
-                                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.8rem', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                                 {item.staticExpenseDescription}
                                                             </Typography>
                                                         )}
                                                     </Box>
-                                                    <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right' }}>
+                                                    <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', fontSize: '0.95rem', minWidth: '80px', textAlign: 'right' }}>
                                                         {formatCurrency(item.staticExpensePrice || 0, currency)}
                                                     </Typography>
                                                     <IconButton
@@ -1443,18 +1452,20 @@ export default function Budget() {
                                                         size="small"
                                                         sx={{
                                                             color: theme.palette.primary.main,
+                                                            padding: '4px',
                                                         }}
                                                     >
-                                                        <EditIcon />
+                                                        <EditIcon fontSize="small" />
                                                     </IconButton>
                                                     <IconButton
                                                         onClick={() => handleDeleteItem(item.id)}
                                                         size="small"
                                                         sx={{
                                                             color: theme.palette.error.main,
+                                                            padding: '4px',
                                                         }}
                                                     >
-                                                        <DeleteIcon />
+                                                        <DeleteIcon fontSize="small" />
                                                     </IconButton>
                                                 </>
                                             )}
