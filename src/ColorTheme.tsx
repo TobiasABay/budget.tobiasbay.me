@@ -32,6 +32,11 @@ export const theme = createTheme({
         success: {
             main: '#0C7978', // Using a darker greenish shade for success
         },
+        warning: {
+            main: '#FFA726', // Orange color for fun/static expenses
+            dark: '#F57C00',
+            contrastText: '#FFFFFF',
+        },
         text: {
             primary: '#6DA5C0', // Using a lighter text color for better readability
             secondary: '#ffffff', // White text for contrast

@@ -7,6 +7,8 @@ import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import LocalActivityIcon from '@mui/icons-material/LocalActivity';
+import EditIcon from '@mui/icons-material/Edit';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -30,18 +32,25 @@ interface LineItem {
     loanTitle?: string;
     loanStartDate?: string; // Format: "YYYY-MM-DD"
     loanValue?: number;
+    isStaticExpense?: boolean;
+    staticExpenseDate?: string; // Format: "YYYY-MM-DD"
+    staticExpensePrice?: number;
 }
 
 export default function Budget() {
     const { year } = useParams<{ year: string }>();
     const { user, isLoaded } = useUser();
     const [modalOpen, setModalOpen] = useState(false);
-    const [selectedType, setSelectedType] = useState<'income' | 'expense' | 'loan' | null>(null);
+    const [selectedType, setSelectedType] = useState<'income' | 'expense' | 'loan' | 'staticExpense' | null>(null);
     const [itemName, setItemName] = useState('');
     const [isLoan, setIsLoan] = useState(false);
     const [loanTitle, setLoanTitle] = useState('');
     const [loanStartDate, setLoanStartDate] = useState('');
     const [loanValue, setLoanValue] = useState('');
+    const [isStaticExpense, setIsStaticExpense] = useState(false);
+    const [staticExpenseName, setStaticExpenseName] = useState('');
+    const [staticExpenseDate, setStaticExpenseDate] = useState('');
+    const [staticExpensePrice, setStaticExpensePrice] = useState('');
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -51,6 +60,10 @@ export default function Budget() {
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [selectedItemForDelete, setSelectedItemForDelete] = useState<string | null>(null);
     const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
+    const [editingStaticExpense, setEditingStaticExpense] = useState<string | null>(null);
+    const [editStaticExpenseName, setEditStaticExpenseName] = useState('');
+    const [editStaticExpenseDate, setEditStaticExpenseDate] = useState('');
+    const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
 
@@ -162,14 +175,18 @@ export default function Budget() {
         setMenuAnchor(null);
     };
 
-    const handleOpenModal = (type: 'income' | 'expense' | 'loan') => {
+    const handleOpenModal = (type: 'income' | 'expense' | 'loan' | 'staticExpense') => {
         setModalOpen(true);
         setSelectedType(type);
         setItemName('');
         setIsLoan(type === 'loan');
+        setIsStaticExpense(type === 'staticExpense');
         setLoanTitle('');
         setLoanStartDate('');
         setLoanValue('');
+        setStaticExpenseName('');
+        setStaticExpenseDate('');
+        setStaticExpensePrice('');
         handleCloseMenu();
     };
 
@@ -178,22 +195,28 @@ export default function Budget() {
         setSelectedType(null);
         setItemName('');
         setIsLoan(false);
+        setIsStaticExpense(false);
         setLoanTitle('');
         setLoanStartDate('');
         setLoanValue('');
+        setStaticExpenseName('');
+        setStaticExpenseDate('');
+        setStaticExpensePrice('');
     };
 
     const handleCreateItem = () => {
         if (isLoan) {
             if (!loanTitle.trim() || !loanStartDate || !loanValue) return;
+        } else if (isStaticExpense) {
+            if (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) return;
         } else {
             if (!itemName.trim() || !selectedType) return;
         }
 
         let itemType: 'income' | 'expense';
-        if (isLoan) {
-            itemType = 'expense'; // Loans are tracked as expenses
-        } else if (selectedType === 'loan' || !selectedType) {
+        if (isLoan || isStaticExpense) {
+            itemType = 'expense'; // Loans and static expenses are tracked as expenses
+        } else if (selectedType === 'loan' || selectedType === 'staticExpense' || !selectedType) {
             itemType = 'expense';
         } else if (selectedType === 'income') {
             itemType = 'income';
@@ -201,18 +224,33 @@ export default function Budget() {
             itemType = 'expense';
         }
 
+        // For static expenses, determine which month the date falls in
+        let months: { [key: string]: number } = {};
+        if (isStaticExpense && staticExpenseDate) {
+            const date = new Date(staticExpenseDate);
+            const monthIndex = date.getMonth();
+            const monthName = MONTHS[monthIndex];
+            const price = parseFloat(staticExpensePrice) || 0;
+            months[monthName] = price;
+        }
+
         const newItem: LineItem = {
             id: Date.now().toString(),
-            name: isLoan ? loanTitle.trim() : itemName.trim(),
+            name: isLoan ? loanTitle.trim() : isStaticExpense ? staticExpenseName.trim() : itemName.trim(),
             type: itemType,
             amount: 0,
             frequency: 'Monthly',
-            months: {},
+            months: months,
             ...(isLoan && {
                 isLoan: true,
                 loanTitle: loanTitle.trim(),
                 loanStartDate: loanStartDate,
                 loanValue: parseFloat(loanValue) || 0
+            }),
+            ...(isStaticExpense && {
+                isStaticExpense: true,
+                staticExpenseDate: staticExpenseDate,
+                staticExpensePrice: parseFloat(staticExpensePrice) || 0
             })
         };
 
@@ -361,6 +399,18 @@ export default function Budget() {
                             }}
                         >
                             Add Expense
+                        </MenuItem>
+                        <MenuItem
+                            onClick={() => handleOpenModal('staticExpense')}
+                            sx={{
+                                color: theme.palette.warning.main,
+                                '&:hover': {
+                                    bgcolor: theme.palette.warning.main,
+                                    color: theme.palette.warning.contrastText,
+                                },
+                            }}
+                        >
+                            Add Static Expense
                         </MenuItem>
                         <MenuItem
                             onClick={() => handleOpenModal('loan')}
@@ -646,7 +696,7 @@ export default function Budget() {
                             </TableRow>
                             {/* Regular Expense Items */}
                             {lineItems
-                                .filter(item => item.type === 'expense' && !item.isLoan)
+                                .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense)
                                 .map((item) => {
                                     return (
                                         <TableRow key={item.id}>
@@ -817,6 +867,64 @@ export default function Budget() {
                                         </TableRow>
                                     );
                                 })}
+                            {/* Static Expenses Summary Row (above loans) */}
+                            {(() => {
+                                const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
+                                if (staticExpenses.length === 0) return null;
+
+                                return (
+                                    <TableRow>
+                                        <TableCell
+                                            sx={{
+                                                color: theme.palette.warning.main,
+                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                padding: '12px 8px',
+                                                fontWeight: 'bold',
+                                                bgcolor: theme.palette.background.default,
+                                            }}
+                                        >
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <LocalActivityIcon
+                                                    sx={{
+                                                        fontSize: '1rem',
+                                                        color: theme.palette.warning.main,
+                                                        opacity: 0.8
+                                                    }}
+                                                />
+                                                <span>Static Expenses</span>
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell
+                                            sx={{
+                                                color: theme.palette.text.primary,
+                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                padding: '12px 8px',
+                                                bgcolor: theme.palette.background.default,
+                                            }}
+                                        >
+                                            -
+                                        </TableCell>
+                                        {MONTHS.map((month) => {
+                                            const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                            return (
+                                                <TableCell
+                                                    key={month}
+                                                    align="center"
+                                                    sx={{
+                                                        color: theme.palette.warning.main,
+                                                        padding: '12px 4px',
+                                                        fontSize: '0.875rem',
+                                                        fontWeight: 'bold',
+                                                        bgcolor: theme.palette.background.default,
+                                                    }}
+                                                >
+                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
+                                                </TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                );
+                            })()}
                             {/* Loan Items (at bottom of expenses) */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && item.isLoan)
@@ -1133,6 +1241,190 @@ export default function Budget() {
                     </Table>
                 </Paper>
 
+                {/* Static Expenses List */}
+                <Paper sx={{ bgcolor: theme.palette.background.paper, padding: '2rem', marginTop: '2rem' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: '1.5rem' }}>
+                        <LocalActivityIcon sx={{ color: theme.palette.warning.main }} />
+                        <Typography sx={{ color: theme.palette.text.primary }} variant="h5">
+                            Static Expenses
+                        </Typography>
+                    </Box>
+                    {lineItems.filter(item => item.type === 'expense' && item.isStaticExpense).length === 0 ? (
+                        <Typography sx={{ color: theme.palette.text.secondary, fontStyle: 'italic' }}>
+                            No static expenses added yet. Click the add button to create one.
+                        </Typography>
+                    ) : (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            {lineItems
+                                .filter(item => item.type === 'expense' && item.isStaticExpense)
+                                .sort((a, b) => {
+                                    const dateA = a.staticExpenseDate || '';
+                                    const dateB = b.staticExpenseDate || '';
+                                    return dateA.localeCompare(dateB);
+                                })
+                                .map((item) => {
+                                    const isEditing = editingStaticExpense === item.id;
+                                    return (
+                                        <Paper
+                                            key={item.id}
+                                            sx={{
+                                                bgcolor: theme.palette.background.default,
+                                                padding: '1rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 2,
+                                                '&:hover': {
+                                                    bgcolor: theme.palette.background.paper,
+                                                },
+                                            }}
+                                        >
+                                            {isEditing ? (
+                                                <>
+                                                    <TextField
+                                                        label="Name"
+                                                        value={editStaticExpenseName}
+                                                        onChange={(e) => setEditStaticExpenseName(e.target.value)}
+                                                        size="small"
+                                                        sx={{
+                                                            flex: 1,
+                                                            '& .MuiOutlinedInput-root': {
+                                                                color: theme.palette.text.primary,
+                                                                '& fieldset': {
+                                                                    borderColor: theme.palette.secondary.main,
+                                                                },
+                                                            },
+                                                        }}
+                                                    />
+                                                    <TextField
+                                                        label="Date"
+                                                        type="date"
+                                                        value={editStaticExpenseDate}
+                                                        onChange={(e) => setEditStaticExpenseDate(e.target.value)}
+                                                        size="small"
+                                                        InputLabelProps={{ shrink: true }}
+                                                        sx={{
+                                                            '& .MuiOutlinedInput-root': {
+                                                                color: theme.palette.text.primary,
+                                                                '& fieldset': {
+                                                                    borderColor: theme.palette.secondary.main,
+                                                                },
+                                                            },
+                                                        }}
+                                                    />
+                                                    <TextField
+                                                        label="Price"
+                                                        type="number"
+                                                        value={editStaticExpensePrice}
+                                                        onChange={(e) => setEditStaticExpensePrice(e.target.value)}
+                                                        size="small"
+                                                        sx={{
+                                                            width: '120px',
+                                                            '& .MuiOutlinedInput-root': {
+                                                                color: theme.palette.text.primary,
+                                                                '& fieldset': {
+                                                                    borderColor: theme.palette.secondary.main,
+                                                                },
+                                                            },
+                                                        }}
+                                                    />
+                                                    <Button
+                                                        onClick={() => {
+                                                            if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
+
+                                                            const date = new Date(editStaticExpenseDate);
+                                                            const monthIndex = date.getMonth();
+                                                            const monthName = MONTHS[monthIndex];
+                                                            const price = parseFloat(editStaticExpensePrice) || 0;
+
+                                                            const updatedItems = lineItems.map(li => {
+                                                                if (li.id === item.id) {
+                                                                    const newMonths: { [key: string]: number } = {};
+                                                                    newMonths[monthName] = price;
+                                                                    return {
+                                                                        ...li,
+                                                                        name: editStaticExpenseName.trim(),
+                                                                        staticExpenseDate: editStaticExpenseDate,
+                                                                        staticExpensePrice: price,
+                                                                        months: newMonths,
+                                                                    };
+                                                                }
+                                                                return li;
+                                                            });
+                                                            setLineItems(updatedItems);
+                                                            setEditingStaticExpense(null);
+                                                            setEditStaticExpenseName('');
+                                                            setEditStaticExpenseDate('');
+                                                            setEditStaticExpensePrice('');
+                                                        }}
+                                                        variant="contained"
+                                                        size="small"
+                                                        sx={{
+                                                            bgcolor: theme.palette.primary.main,
+                                                            color: theme.palette.primary.contrastText,
+                                                        }}
+                                                    >
+                                                        Save
+                                                    </Button>
+                                                    <Button
+                                                        onClick={() => {
+                                                            setEditingStaticExpense(null);
+                                                            setEditStaticExpenseName('');
+                                                            setEditStaticExpenseDate('');
+                                                            setEditStaticExpensePrice('');
+                                                        }}
+                                                        size="small"
+                                                        sx={{
+                                                            color: theme.palette.text.secondary,
+                                                        }}
+                                                    >
+                                                        Cancel
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                                        <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold' }}>
+                                                            {item.name}
+                                                        </Typography>
+                                                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                            {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
+                                                        </Typography>
+                                                    </Box>
+                                                    <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right' }}>
+                                                        {formatCurrency(item.staticExpensePrice || 0, currency)}
+                                                    </Typography>
+                                                    <IconButton
+                                                        onClick={() => {
+                                                            setEditingStaticExpense(item.id);
+                                                            setEditStaticExpenseName(item.name);
+                                                            setEditStaticExpenseDate(item.staticExpenseDate || '');
+                                                            setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
+                                                        }}
+                                                        size="small"
+                                                        sx={{
+                                                            color: theme.palette.primary.main,
+                                                        }}
+                                                    >
+                                                        <EditIcon />
+                                                    </IconButton>
+                                                    <IconButton
+                                                        onClick={() => handleDeleteItem(item.id)}
+                                                        size="small"
+                                                        sx={{
+                                                            color: theme.palette.error.main,
+                                                        }}
+                                                    >
+                                                        <DeleteIcon />
+                                                    </IconButton>
+                                                </>
+                                            )}
+                                        </Paper>
+                                    );
+                                })}
+                        </Box>
+                    )}
+                </Paper>
+
                 <Dialog
                     open={modalOpen}
                     onClose={handleCloseModal}
@@ -1144,11 +1436,98 @@ export default function Budget() {
                     }}
                 >
                     <DialogTitle sx={{ color: theme.palette.text.primary }}>
-                        {selectedType === 'loan' ? 'Create New Loan' : selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
+                        {selectedType === 'loan' ? 'Create New Loan' : selectedType === 'staticExpense' ? 'Create New Static Expense' : selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: '300px', marginTop: '1rem' }}>
-                            {isLoan ? (
+                            {isStaticExpense ? (
+                                <>
+                                    <TextField
+                                        label="Name"
+                                        value={staticExpenseName}
+                                        onChange={(e) => setStaticExpenseName(e.target.value)}
+                                        fullWidth
+                                        autoFocus
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Date"
+                                        type="date"
+                                        value={staticExpenseDate}
+                                        onChange={(e) => setStaticExpenseDate(e.target.value)}
+                                        fullWidth
+                                        InputLabelProps={{
+                                            shrink: true,
+                                        }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                    <TextField
+                                        label="Price"
+                                        type="number"
+                                        value={staticExpensePrice}
+                                        onChange={(e) => setStaticExpensePrice(e.target.value)}
+                                        fullWidth
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            },
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            },
+                                        }}
+                                    />
+                                </>
+                            ) : isLoan ? (
                                 <>
                                     <TextField
                                         label="Loan Title"
@@ -1285,25 +1664,31 @@ export default function Budget() {
                         </Button>
                         <Button
                             onClick={handleCreateItem}
-                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : (!selectedType || !itemName.trim())}
+                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : isStaticExpense ? (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) : (!selectedType || !itemName.trim())}
                             variant="contained"
                             sx={{
                                 color: isLoan
                                     ? theme.palette.info.contrastText
-                                    : selectedType
-                                        ? (selectedType === 'income' ? theme.palette.success.contrastText : theme.palette.error.contrastText)
-                                        : theme.palette.text.secondary,
+                                    : isStaticExpense
+                                        ? theme.palette.warning.contrastText
+                                        : selectedType
+                                            ? (selectedType === 'income' ? theme.palette.success.contrastText : theme.palette.error.contrastText)
+                                            : theme.palette.text.secondary,
                                 bgcolor: isLoan
                                     ? theme.palette.info.main
-                                    : selectedType
-                                        ? (selectedType === 'income' ? theme.palette.success.main : theme.palette.error.main)
-                                        : theme.palette.background.default,
+                                    : isStaticExpense
+                                        ? theme.palette.warning.main
+                                        : selectedType
+                                            ? (selectedType === 'income' ? theme.palette.success.main : theme.palette.error.main)
+                                            : theme.palette.background.default,
                                 '&:hover': {
                                     bgcolor: isLoan
                                         ? theme.palette.info.dark
-                                        : selectedType
-                                            ? (selectedType === 'income' ? theme.palette.success.dark : theme.palette.error.dark)
-                                            : theme.palette.background.default,
+                                        : isStaticExpense
+                                            ? theme.palette.warning.dark
+                                            : selectedType
+                                                ? (selectedType === 'income' ? theme.palette.success.dark : theme.palette.error.dark)
+                                                : theme.palette.background.default,
                                 },
                                 '&:disabled': {
                                     bgcolor: theme.palette.background.default,
