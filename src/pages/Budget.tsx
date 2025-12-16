@@ -891,7 +891,7 @@ export default function Budget() {
                                                         opacity: 0.8
                                                     }}
                                                 />
-                                                <span>Static Expenses</span>
+                                                <span>Fun Expenses</span>
                                             </Box>
                                         </TableCell>
                                         <TableCell
@@ -1246,7 +1246,7 @@ export default function Budget() {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: '1.5rem' }}>
                         <LocalActivityIcon sx={{ color: theme.palette.warning.main }} />
                         <Typography sx={{ color: theme.palette.text.primary }} variant="h5">
-                            Static Expenses
+                            Fun Expenses
                         </Typography>
                     </Box>
                     {lineItems.filter(item => item.type === 'expense' && item.isStaticExpense).length === 0 ? (

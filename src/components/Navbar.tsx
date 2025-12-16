@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme as customTheme } from '../ColorTheme.tsx';
 import CustomButton from '../components/buttons/CustomButton.tsx';
-import AppsIcon from '@mui/icons-material/Apps';
-import PersonIcon from '@mui/icons-material/Person';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { UserButton, useUser } from '@clerk/clerk-react';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
+import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
@@ -41,8 +43,10 @@ export default function Navbar() {
   const [budgets, setBudgets] = useState<string[]>([]);
 
   const menuItems = [
-    { text: 'Loans', icon: <PersonIcon />, path: '/loans' },
-    { text: 'Salary', icon: <PersonIcon />, path: '/salary' },
+    { text: 'Loans', icon: <PaymentsIcon />, path: '/loans' },
+    { text: 'Salary', icon: <RequestQuoteIcon />, path: '/salary' },
+    { text: 'Insurance', icon: <AssignmentIndIcon />, path: '/insurance' },
+
   ];
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function Navbar() {
                 <ListItem key={year} disablePadding>
                   <ListItemButton onClick={() => { navigate(`/budgets/${year}`); setDrawerOpen(false); }}>
                     <ListItemIcon sx={{ color: customTheme.palette.secondary.contrastText }}>
-                      <AppsIcon />
+                      <RequestQuoteIcon />
                     </ListItemIcon>
                     <ListItemText sx={{ color: customTheme.palette.secondary.contrastText }} primary={`Budget ${year}`} />
                   </ListItemButton>
@@ -158,7 +162,7 @@ export default function Navbar() {
           }}
         >
           <CustomButton onClick={handleBudgetMenuOpen}>
-            Budgets <AppsIcon /> <ArrowDropDownIcon />
+            Budgets  <ArrowDropDownIcon />
           </CustomButton>
           <Menu
             anchorEl={budgetMenuAnchor}
