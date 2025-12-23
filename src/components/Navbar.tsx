@@ -1,11 +1,15 @@
 import MenuIcon from '@mui/icons-material/Menu';
-import { Box, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, useMediaQuery, useTheme, Menu, MenuItem } from '@mui/material';
+import { Box, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, useMediaQuery, useTheme, Menu, MenuItem, Collapse, Skeleton } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme as customTheme } from '../ColorTheme.tsx';
 import CustomButton from '../components/buttons/CustomButton.tsx';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import FolderIcon from '@mui/icons-material/Folder';
+import CloseIcon from '@mui/icons-material/Close';
 import { UserButton, useUser } from '@clerk/clerk-react';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
@@ -41,6 +45,8 @@ export default function Navbar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [budgetMenuAnchor, setBudgetMenuAnchor] = useState<null | HTMLElement>(null);
   const [budgets, setBudgets] = useState<string[]>([]);
+  const [budgetsExpanded, setBudgetsExpanded] = useState(false);
+  const [budgetsLoading, setBudgetsLoading] = useState(true);
 
   const menuItems = [
     { text: 'Loans', icon: <PaymentsIcon />, path: '/loans' },
@@ -57,11 +63,14 @@ export default function Navbar() {
 
   const loadBudgets = async () => {
     if (!user?.id) return;
+    setBudgetsLoading(true);
     try {
       const budgetList = await fetchBudgets(user.id);
       setBudgets(budgetList);
     } catch (error) {
       console.error('Error loading budgets:', error);
+    } finally {
+      setBudgetsLoading(false);
     }
   };
 
@@ -116,17 +125,62 @@ export default function Navbar() {
             <MenuIcon sx={{ color: customTheme.palette.secondary.contrastText }} />
           </IconButton>
           <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', padding: '1rem' }}>
+              <IconButton
+                onClick={() => setDrawerOpen(false)}
+                sx={{ color: customTheme.palette.secondary.contrastText }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
             <List sx={{ width: 350, bgcolor: "#072E33", height: "100%" }}>
-              {budgets.map((year) => (
-                <ListItem key={year} disablePadding>
-                  <ListItemButton onClick={() => { navigate(`/budgets/${year}`); setDrawerOpen(false); }}>
-                    <ListItemIcon sx={{ color: customTheme.palette.secondary.contrastText }}>
-                      <RequestQuoteIcon />
-                    </ListItemIcon>
-                    <ListItemText sx={{ color: customTheme.palette.secondary.contrastText }} primary={`Budget ${year}`} />
-                  </ListItemButton>
-                </ListItem>
-              ))}
+              {/* Budgets Parent Folder */}
+              <ListItem disablePadding>
+                <ListItemButton onClick={() => setBudgetsExpanded(!budgetsExpanded)}>
+                  <ListItemIcon sx={{ color: customTheme.palette.secondary.contrastText }}>
+                    <FolderIcon />
+                  </ListItemIcon>
+                  <ListItemText sx={{ color: customTheme.palette.secondary.contrastText }} primary="Budgets" />
+                  {budgetsExpanded ? (
+                    <ExpandLessIcon sx={{ color: customTheme.palette.secondary.contrastText }} />
+                  ) : (
+                    <ExpandMoreIcon sx={{ color: customTheme.palette.secondary.contrastText }} />
+                  )}
+                </ListItemButton>
+              </ListItem>
+              <Collapse in={budgetsExpanded} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding>
+                  {budgetsLoading ? (
+                    // Show skeleton loaders while loading
+                    Array.from({ length: 3 }).map((_, index) => (
+                      <ListItem key={`skeleton-${index}`} disablePadding>
+                        <ListItemButton disabled sx={{ pl: 4 }}>
+                          <ListItemIcon sx={{ minWidth: '40px' }}>
+                            <Skeleton variant="circular" width={24} height={24} sx={{ bgcolor: customTheme.palette.secondary.main }} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={<Skeleton variant="text" width="60%" sx={{ bgcolor: customTheme.palette.secondary.main }} />}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                    ))
+                  ) : (
+                    budgets.map((year) => (
+                      <ListItem key={year} disablePadding>
+                        <ListItemButton
+                          onClick={() => { navigate(`/budgets/${year}`); setDrawerOpen(false); }}
+                          sx={{ pl: 4 }}
+                        >
+                          <ListItemIcon sx={{ color: customTheme.palette.secondary.contrastText, minWidth: '40px' }}>
+                            <RequestQuoteIcon />
+                          </ListItemIcon>
+                          <ListItemText sx={{ color: customTheme.palette.secondary.contrastText }} primary={`Budget ${year}`} />
+                        </ListItemButton>
+                      </ListItem>
+                    ))
+                  )}
+                </List>
+              </Collapse>
               {menuItems.map((item) => (
                 <ListItem key={item.text} disablePadding>
                   <ListItemButton onClick={() => { navigate(item.path); setDrawerOpen(false); }}>
@@ -185,21 +239,30 @@ export default function Navbar() {
               },
             }}
           >
-            {budgetItems.map((item) => (
-              <MenuItem
-                key={item.text}
-                onClick={() => handleBudgetMenuItemClick(item.path)}
-                sx={{
-                  color: customTheme.palette.text.primary,
-                  '&:hover': {
-                    bgcolor: customTheme.palette.primary.main,
-                    color: customTheme.palette.primary.contrastText,
-                  },
-                }}
-              >
-                {item.text}
-              </MenuItem>
-            ))}
+            {budgetsLoading ? (
+              // Show skeleton loaders while loading
+              Array.from({ length: 3 }).map((_, index) => (
+                <MenuItem key={`skeleton-${index}`} disabled>
+                  <Skeleton variant="text" width="100%" sx={{ bgcolor: customTheme.palette.secondary.main }} />
+                </MenuItem>
+              ))
+            ) : (
+              budgetItems.map((item) => (
+                <MenuItem
+                  key={item.text}
+                  onClick={() => handleBudgetMenuItemClick(item.path)}
+                  sx={{
+                    color: customTheme.palette.text.primary,
+                    '&:hover': {
+                      bgcolor: customTheme.palette.primary.main,
+                      color: customTheme.palette.primary.contrastText,
+                    },
+                  }}
+                >
+                  {item.text}
+                </MenuItem>
+              ))
+            )}
           </Menu>
           {menuItems.map((item) => (
             <CustomButton key={item.text} onClick={() => navigate(item.path)}>

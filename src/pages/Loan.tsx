@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, CircularProgress, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, CircularProgress, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, useMediaQuery, useTheme } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
@@ -41,6 +41,8 @@ interface LoanPayment {
 
 export default function Loan() {
     const { user, isLoaded } = useUser();
+    const muiTheme = useTheme();
+    const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
     const [loans, setLoans] = useState<Loan[]>([]);
     const [budgetData, setBudgetData] = useState<{ [year: string]: BudgetItem[] }>({});
     const [loading, setLoading] = useState(true);
@@ -256,15 +258,29 @@ export default function Loan() {
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
             <Navbar />
-            <Box sx={{ padding: '2rem', flex: 1, width: '100%', overflow: 'hidden' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-                    <Typography sx={{ color: theme.palette.text.primary }} variant="h4">
+            <Box sx={{
+                padding: isMobile ? '1rem' : '2rem',
+                flex: 1,
+                width: '100%',
+                overflow: 'hidden',
+                maxWidth: '100%'
+            }}>
+                <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: isMobile ? '1rem' : '2rem',
+                    flexWrap: 'wrap',
+                    gap: 2
+                }}>
+                    <Typography sx={{ color: theme.palette.text.primary }} variant={isMobile ? "h5" : "h4"}>
                         Loans
                     </Typography>
                     <Button
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={() => setModalOpen(true)}
+                        size={isMobile ? "small" : "medium"}
                         sx={{
                             bgcolor: theme.palette.primary.main,
                             color: theme.palette.primary.contrastText,
@@ -277,8 +293,27 @@ export default function Loan() {
                     </Button>
                 </Box>
 
-                <Paper sx={{ bgcolor: theme.palette.background.paper, overflow: 'hidden', width: '100%' }}>
-                    <Table stickyHeader sx={{ tableLayout: 'fixed', width: '100%' }}>
+                <Paper sx={{
+                    bgcolor: theme.palette.background.paper,
+                    overflow: 'auto',
+                    width: '100%',
+                    maxWidth: '100%',
+                    '&::-webkit-scrollbar': {
+                        height: '8px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                        background: theme.palette.background.default,
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                        background: theme.palette.secondary.main,
+                        borderRadius: '4px',
+                    },
+                }}>
+                    <Table stickyHeader sx={{
+                        tableLayout: isMobile ? 'auto' : 'fixed',
+                        width: isMobile ? 'max-content' : '100%',
+                        minWidth: isMobile ? '600px' : 'auto'
+                    }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell
@@ -286,8 +321,10 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '20%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '100px' : '20%',
+                                        minWidth: isMobile ? '100px' : 'auto',
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
                                     Budget Year
@@ -297,8 +334,10 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '25%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '120px' : '25%',
+                                        minWidth: isMobile ? '120px' : 'auto',
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
                                     Loan Name
@@ -309,11 +348,13 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '25%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '100px' : '25%',
+                                        minWidth: isMobile ? '100px' : 'auto',
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
-                                    Afdrag ({currencyText})
+                                    {isMobile ? 'Afdrag' : `Afdrag (${currencyText})`}
                                 </TableCell>
                                 <TableCell
                                     align="right"
@@ -321,19 +362,23 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '20%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '100px' : '20%',
+                                        minWidth: isMobile ? '100px' : 'auto',
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
-                                    Remaining ({currencyText})
+                                    {isMobile ? 'Remaining' : `Remaining (${currencyText})`}
                                 </TableCell>
                                 <TableCell
                                     sx={{
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '15%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '90px' : '15%',
+                                        minWidth: isMobile ? '90px' : 'auto',
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
                                     Created
@@ -343,8 +388,9 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '5%',
-                                        padding: '12px 8px',
+                                        width: isMobile ? '50px' : '5%',
+                                        minWidth: isMobile ? '50px' : 'auto',
+                                        padding: isMobile ? '8px 2px' : '12px 8px',
                                     }}
                                 >
                                 </TableCell>
@@ -360,22 +406,47 @@ export default function Loan() {
                             ) : (
                                 loanPayments.map((payment, index) => (
                                     <TableRow key={`${payment.loanId}-${payment.year}-${index}`}>
-                                        <TableCell sx={{ color: theme.palette.text.primary, padding: '12px 8px' }}>
+                                        <TableCell sx={{
+                                            color: theme.palette.text.primary,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        }}>
                                             {payment.year}
                                         </TableCell>
-                                        <TableCell sx={{ color: theme.palette.text.primary, padding: '12px 8px' }}>
+                                        <TableCell sx={{
+                                            color: theme.palette.text.primary,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        }}>
                                             {payment.loanName}
                                         </TableCell>
-                                        <TableCell align="right" sx={{ color: theme.palette.text.primary, padding: '12px 8px' }}>
+                                        <TableCell align="right" sx={{
+                                            color: theme.palette.text.primary,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        }}>
                                             {formatCurrency(payment.totalPayment, currency)}
                                         </TableCell>
-                                        <TableCell align="right" sx={{ color: payment.remaining > 0 ? theme.palette.info.main : theme.palette.text.primary, padding: '12px 8px', fontWeight: payment.remaining > 0 ? 'bold' : 'normal' }}>
+                                        <TableCell align="right" sx={{
+                                            color: payment.remaining > 0 ? theme.palette.info.main : theme.palette.text.primary,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: payment.remaining > 0 ? 'bold' : 'normal',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        }}>
                                             {formatCurrency(payment.remaining, currency)}
                                         </TableCell>
-                                        <TableCell sx={{ color: theme.palette.text.primary, padding: '12px 8px' }}>
-                                            {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString() : '-'}
+                                        <TableCell sx={{
+                                            color: theme.palette.text.primary,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                        }}>
+                                            {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: isMobile ? 'numeric' : 'short',
+                                                day: 'numeric'
+                                            }) : '-'}
                                         </TableCell>
-                                        <TableCell sx={{ padding: '4px' }}>
+                                        <TableCell sx={{ padding: isMobile ? '4px 2px' : '4px' }}>
                                             {index === 0 || loanPayments[index - 1].loanId !== payment.loanId ? (
                                                 <IconButton
                                                     size="small"
@@ -399,12 +470,25 @@ export default function Loan() {
                 </Paper>
 
                 {/* Create Loan Dialog */}
-                <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
-                    <DialogTitle sx={{ color: theme.palette.text.primary }}>
+                <Dialog
+                    open={modalOpen}
+                    onClose={() => setModalOpen(false)}
+                    maxWidth="sm"
+                    fullWidth
+                    fullScreen={isMobile}
+                    PaperProps={{
+                        sx: {
+                            margin: isMobile ? 0 : 'auto',
+                            width: isMobile ? '100%' : 'auto',
+                            maxHeight: isMobile ? '100%' : '90vh',
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ color: theme.palette.text.primary, fontSize: isMobile ? '1.1rem' : '1.25rem' }}>
                         Create New Loan
                     </DialogTitle>
                     <DialogContent>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: '1rem' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: isMobile ? '0.5rem' : '1rem' }}>
                             <TextField
                                 label="Loan Name"
                                 value={loanName}

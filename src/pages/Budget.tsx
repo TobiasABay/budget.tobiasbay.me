@@ -9,6 +9,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import LocalActivityIcon from '@mui/icons-material/LocalActivity';
 import EditIcon from '@mui/icons-material/Edit';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -79,6 +80,8 @@ export default function Budget() {
     const [editStaticExpenseName, setEditStaticExpenseName] = useState('');
     const [editStaticExpenseDate, setEditStaticExpenseDate] = useState('');
     const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
+    const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+    const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
 
     // Evaluate a formula string (e.g., "=2+2" or "=10*1.5")
@@ -471,6 +474,71 @@ export default function Budget() {
         setSelectedItemForDelete(selectedItemForDelete === itemId ? null : itemId);
     };
 
+    const handleDragStart = (e: React.DragEvent, itemId: string) => {
+        setDraggedItemId(itemId);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', itemId);
+    };
+
+    const handleDragOver = (e: React.DragEvent, itemId: string) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (draggedItemId && draggedItemId !== itemId) {
+            setDragOverItemId(itemId);
+        }
+    };
+
+    const handleDragLeave = () => {
+        setDragOverItemId(null);
+    };
+
+    const handleDrop = (e: React.DragEvent, targetItemId: string, itemType: 'income' | 'expense') => {
+        e.preventDefault();
+        if (!draggedItemId || draggedItemId === targetItemId) {
+            setDraggedItemId(null);
+            setDragOverItemId(null);
+            return;
+        }
+
+        const draggedItem = lineItems.find(item => item.id === draggedItemId);
+        if (!draggedItem || draggedItem.type !== itemType) {
+            setDraggedItemId(null);
+            setDragOverItemId(null);
+            return;
+        }
+
+        // Find the actual indices in the full lineItems array
+        const draggedIndex = lineItems.findIndex(item => item.id === draggedItemId);
+        const targetIndex = lineItems.findIndex(item => item.id === targetItemId);
+
+        if (draggedIndex === -1 || targetIndex === -1) {
+            setDraggedItemId(null);
+            setDragOverItemId(null);
+            return;
+        }
+
+        // Only allow reordering within the same type
+        if (lineItems[draggedIndex].type !== lineItems[targetIndex].type) {
+            setDraggedItemId(null);
+            setDragOverItemId(null);
+            return;
+        }
+
+        // Reorder items in the array
+        const updatedItems = [...lineItems];
+        const [removed] = updatedItems.splice(draggedIndex, 1);
+        updatedItems.splice(targetIndex, 0, removed);
+
+        setLineItems(updatedItems);
+        setDraggedItemId(null);
+        setDragOverItemId(null);
+    };
+
+    const handleDragEnd = () => {
+        setDraggedItemId(null);
+        setDragOverItemId(null);
+    };
+
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
             <Navbar />
@@ -620,9 +688,24 @@ export default function Budget() {
                             {/* Income Items */}
                             {lineItems
                                 .filter(item => item.type === 'income')
-                                .sort((a, b) => a.name.localeCompare(b.name))
                                 .map((item) => (
-                                    <TableRow key={item.id}>
+                                    <TableRow
+                                        key={item.id}
+                                        draggable
+                                        onDragStart={(e) => handleDragStart(e, item.id)}
+                                        onDragOver={(e) => handleDragOver(e, item.id)}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, item.id, 'income')}
+                                        onDragEnd={handleDragEnd}
+                                        sx={{
+                                            opacity: draggedItemId === item.id ? 0.5 : 1,
+                                            bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                            cursor: 'move',
+                                            '&:hover': {
+                                                bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                            },
+                                        }}
+                                    >
                                         <TableCell
                                             onClick={() => handleNameCellClick(item.id)}
                                             sx={{
@@ -632,11 +715,23 @@ export default function Budget() {
                                                 cursor: 'pointer',
                                                 fontSize: isMobile ? '0.75rem' : '0.875rem',
                                                 '&:hover': {
-                                                    bgcolor: theme.palette.background.default,
+                                                    bgcolor: 'transparent',
                                                 },
                                             }}
                                         >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                {selectedItemForDelete === item.id && (
+                                                    <DragIndicatorIcon
+                                                        sx={{
+                                                            color: theme.palette.text.secondary,
+                                                            fontSize: '1.2rem',
+                                                            cursor: 'grab',
+                                                            '&:active': {
+                                                                cursor: 'grabbing',
+                                                            },
+                                                        }}
+                                                    />
+                                                )}
                                                 <span style={{ flex: 1 }}>{item.name}</span>
                                                 {selectedItemForDelete === item.id && (
                                                     <IconButton
@@ -770,28 +865,51 @@ export default function Budget() {
                             {/* Regular Expense Items */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense)
-                                .sort((a, b) => {
-                                    // Sort by regular expenses first (no linkedLoanId), then loan-linked expenses, then alphabetically
-                                    if (!a.linkedLoanId && b.linkedLoanId) return -1;
-                                    if (a.linkedLoanId && !b.linkedLoanId) return 1;
-                                    return a.name.localeCompare(b.name);
-                                })
                                 .map((item) => {
                                     return (
-                                        <TableRow key={item.id}>
+                                        <TableRow
+                                            key={item.id}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, item.id)}
+                                            onDragOver={(e) => handleDragOver(e, item.id)}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                            onDragEnd={handleDragEnd}
+                                            sx={{
+                                                opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                cursor: 'move',
+                                                '&:hover': {
+                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                },
+                                            }}
+                                        >
                                             <TableCell
                                                 onClick={() => handleNameCellClick(item.id)}
                                                 sx={{
                                                     color: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                    padding: '12px 8px',
+                                                    padding: isMobile ? '8px 4px' : '12px 8px',
                                                     cursor: 'pointer',
+                                                    fontSize: isMobile ? '0.75rem' : '0.875rem',
                                                     '&:hover': {
-                                                        bgcolor: theme.palette.background.default,
+                                                        bgcolor: 'transparent',
                                                     },
                                                 }}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    {selectedItemForDelete === item.id && (
+                                                        <DragIndicatorIcon
+                                                            sx={{
+                                                                color: theme.palette.text.secondary,
+                                                                fontSize: '1.2rem',
+                                                                cursor: 'grab',
+                                                                '&:active': {
+                                                                    cursor: 'grabbing',
+                                                                },
+                                                            }}
+                                                        />
+                                                    )}
                                                     {item.linkedLoanId && (
                                                         <AccountBalanceIcon
                                                             sx={{
