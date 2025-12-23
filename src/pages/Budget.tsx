@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, CircularProgress, Menu } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, Menu } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -570,9 +570,6 @@ export default function Budget() {
                             Add Fun Expense
                         </MenuItem>
                     </Menu>
-                    {saving && (
-                        <CircularProgress size={24} sx={{ color: theme.palette.primary.main }} />
-                    )}
                 </Box>
 
                 <Paper sx={{ bgcolor: theme.palette.background.paper, overflow: 'hidden', width: '100%' }}>

@@ -1,5 +1,5 @@
 import MenuIcon from '@mui/icons-material/Menu';
-import { Box, Container, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, useMediaQuery, useTheme, Menu, MenuItem } from '@mui/material';
+import { Box, Drawer, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, useMediaQuery, useTheme, Menu, MenuItem } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme as customTheme } from '../ColorTheme.tsx';
@@ -96,8 +96,9 @@ export default function Navbar() {
       }}
     >
       {/* Logo/Title */}
-      <Container
+      <Box
         sx={{
+          display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           cursor: 'pointer'
@@ -106,7 +107,7 @@ export default function Navbar() {
       >
         <Typography sx={{ color: customTheme.palette.text.primary, fontWeight: 'bold' }} variant="h6">Tobias Bay</Typography>
         <Typography sx={{ color: customTheme.palette.secondary.contrastText }} variant="h6">Budget</Typography>
-      </Container>
+      </Box>
 
       {isSmallScreen ? (
         // Burger menu for small screens
@@ -152,7 +153,7 @@ export default function Navbar() {
         </Box>
       ) : (
         // Full menu for larger screens
-        <Container
+        <Box
           sx={{
             display: 'flex',
             flexDirection: 'row',
@@ -168,6 +169,7 @@ export default function Navbar() {
             anchorEl={budgetMenuAnchor}
             open={Boolean(budgetMenuAnchor)}
             onClose={handleBudgetMenuClose}
+            disableScrollLock={true}
             anchorOrigin={{
               vertical: 'bottom',
               horizontal: 'right',
@@ -208,7 +210,7 @@ export default function Navbar() {
             Settings <SettingsIcon />
           </CustomButton>
           <UserButton />
-        </Container>
+        </Box>
       )}
     </Box>
   );

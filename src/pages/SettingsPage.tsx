@@ -5,8 +5,19 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import DeleteIcon from '@mui/icons-material/Delete';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
 import type { Currency } from "../utils/currency";
+
+interface Loan {
+  id: string;
+  userId: string;
+  name: string;
+  amount: number;
+  startDate: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
@@ -87,6 +98,50 @@ async function deleteBudget(userId: string, year: string): Promise<string[]> {
   return data.budgets;
 }
 
+async function fetchLoans(userId: string): Promise<Loan[]> {
+  const response = await fetch(`${API_BASE_URL}/loans`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch loans');
+  }
+
+  return response.json();
+}
+
+async function deleteLoan(userId: string, loanId: string): Promise<Loan[]> {
+  const response = await fetch(`${API_BASE_URL}/loans/${loanId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    },
+  });
+
+  if (!response.ok) {
+    let errorMessage = 'Failed to delete loan';
+    try {
+      const error = await response.json();
+      errorMessage = error.error || errorMessage;
+    } catch (e) {
+      errorMessage = response.statusText || errorMessage;
+    }
+    throw new Error(errorMessage);
+  }
+
+  const data = await response.json();
+  if (data.success) {
+    // Reload loans after deletion
+    return fetchLoans(userId);
+  }
+  throw new Error('Invalid response from server');
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, isLoaded } = useUser();
@@ -98,10 +153,15 @@ export default function SettingsPage() {
   const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [budgetToDelete, setBudgetToDelete] = useState<string | null>(null);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loansLoading, setLoansLoading] = useState<boolean>(true);
+  const [loanDeleteDialogOpen, setLoanDeleteDialogOpen] = useState<boolean>(false);
+  const [loanToDelete, setLoanToDelete] = useState<Loan | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       loadBudgets();
+      loadLoans();
     }
   }, [isLoaded, user?.id]);
 
@@ -197,6 +257,44 @@ export default function SettingsPage() {
 
   const handleNavigateToBudget = (year: string) => {
     navigate(`/budgets/${year}`);
+  };
+
+  const loadLoans = async () => {
+    if (!user?.id) return;
+
+    setLoansLoading(true);
+    try {
+      const loansList = await fetchLoans(user.id);
+      setLoans(loansList);
+    } catch (err) {
+      console.error('Error loading loans:', err);
+    } finally {
+      setLoansLoading(false);
+    }
+  };
+
+  const handleLoanDeleteClick = (loan: Loan) => {
+    setLoanToDelete(loan);
+    setLoanDeleteDialogOpen(true);
+  };
+
+  const handleLoanDeleteCancel = () => {
+    setLoanDeleteDialogOpen(false);
+    setLoanToDelete(null);
+  };
+
+  const handleLoanDeleteConfirm = async () => {
+    if (!user?.id || !loanToDelete) return;
+
+    setLoanDeleteDialogOpen(false);
+    try {
+      const updatedLoans = await deleteLoan(user.id, loanToDelete.id);
+      setLoans(updatedLoans);
+      setLoanToDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete loan');
+      console.error('Error deleting loan:', err);
+    }
   };
 
   const handleCurrencyChange = (currencyCode: string) => {
@@ -436,6 +534,76 @@ export default function SettingsPage() {
           )}
         </Paper>
 
+        <Paper
+          sx={{
+            bgcolor: theme.palette.background.paper,
+            padding: '2rem',
+            marginBottom: '2rem',
+          }}
+        >
+          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
+            Existing Loans
+          </Typography>
+          {loansLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+              <CircularProgress sx={{ color: theme.palette.primary.main }} />
+            </Box>
+          ) : (
+            <List>
+              {loans.length === 0 ? (
+                <ListItem>
+                  <ListItemText
+                    primary="No loans created yet"
+                    sx={{ color: theme.palette.text.secondary }}
+                  />
+                </ListItem>
+              ) : (
+                loans.map((loan) => (
+                  <ListItem
+                    key={loan.id}
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLoanDeleteClick(loan);
+                        }}
+                        sx={{
+                          color: theme.palette.error.main,
+                          '&:hover': {
+                            bgcolor: theme.palette.error.main,
+                            color: theme.palette.error.contrastText,
+                          },
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: theme.palette.background.default,
+                      },
+                    }}
+                    onClick={() => navigate('/loans')}
+                  >
+                    <ListItemText
+                      primary={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <AccountBalanceIcon sx={{ fontSize: '1rem', color: theme.palette.info.main }} />
+                          <span>{loan.name}</span>
+                        </Box>
+                      }
+                      secondary={loan.createdAt ? `Created: ${new Date(loan.createdAt).toLocaleDateString()}` : undefined}
+                      sx={{ color: theme.palette.text.primary }}
+                    />
+                  </ListItem>
+                ))
+              )}
+            </List>
+          )}
+        </Paper>
+
         {/* Delete Confirmation Dialog */}
         <Dialog
           open={deleteDialogOpen}
@@ -469,6 +637,54 @@ export default function SettingsPage() {
             </Button>
             <Button
               onClick={handleDeleteConfirm}
+              variant="contained"
+              color="error"
+              sx={{
+                bgcolor: theme.palette.error.main,
+                color: theme.palette.error.contrastText,
+                '&:hover': {
+                  bgcolor: theme.palette.error.dark,
+                },
+              }}
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Loan Delete Confirmation Dialog */}
+        <Dialog
+          open={loanDeleteDialogOpen}
+          onClose={handleLoanDeleteCancel}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.background.paper,
+              color: theme.palette.text.primary,
+            }
+          }}
+        >
+          <DialogTitle sx={{ color: theme.palette.text.primary }}>
+            Delete Loan
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ color: theme.palette.text.secondary }}>
+              Are you sure you want to delete the loan "{loanToDelete?.name}"? This action cannot be undone and will remove all payment history associated with this loan.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={handleLoanDeleteCancel}
+              sx={{
+                color: theme.palette.text.secondary,
+                '&:hover': {
+                  bgcolor: theme.palette.background.default,
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleLoanDeleteConfirm}
               variant="contained"
               color="error"
               sx={{
