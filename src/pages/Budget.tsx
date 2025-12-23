@@ -620,6 +620,7 @@ export default function Budget() {
                             {/* Income Items */}
                             {lineItems
                                 .filter(item => item.type === 'income')
+                                .sort((a, b) => a.name.localeCompare(b.name))
                                 .map((item) => (
                                     <TableRow key={item.id}>
                                         <TableCell
@@ -769,6 +770,12 @@ export default function Budget() {
                             {/* Regular Expense Items */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense)
+                                .sort((a, b) => {
+                                    // Sort by linkedLoanId first (loans first), then alphabetically
+                                    if (a.linkedLoanId && !b.linkedLoanId) return -1;
+                                    if (!a.linkedLoanId && b.linkedLoanId) return 1;
+                                    return a.name.localeCompare(b.name);
+                                })
                                 .map((item) => {
                                     return (
                                         <TableRow key={item.id}>
@@ -929,6 +936,12 @@ export default function Budget() {
                             {/* Loan Items (at bottom of expenses) */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && item.isLoan)
+                                .sort((a, b) => {
+                                    // Sort by loan title/name alphabetically
+                                    const nameA = a.loanTitle || a.name;
+                                    const nameB = b.loanTitle || b.name;
+                                    return nameA.localeCompare(nameB);
+                                })
                                 .map((item) => {
                                     return (
                                         <TableRow key={item.id}>

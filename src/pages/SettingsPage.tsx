@@ -1,11 +1,15 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from "@mui/material";
+import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Divider, Chip, useMediaQuery, useTheme } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
 import DeleteIcon from '@mui/icons-material/Delete';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import FolderIcon from '@mui/icons-material/Folder';
+import CreditCardIcon from '@mui/icons-material/CreditCard';
 import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -145,6 +149,8 @@ async function deleteLoan(userId: string, loanId: string): Promise<Loan[]> {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, isLoaded } = useUser();
+  const muiTheme = useTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
   const [budgetYear, setBudgetYear] = useState<string>('');
   const [budgets, setBudgets] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -312,21 +318,53 @@ export default function SettingsPage() {
   return (
     <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
       <Navbar />
-      <Box sx={{ padding: '2rem', flex: 1, maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-        <Typography sx={{ color: theme.palette.text.primary, marginBottom: '2rem' }} variant="h4">
-          Settings
-        </Typography>
+      <Box sx={{
+        padding: isMobile ? '1rem' : '2rem',
+        flex: 1,
+        maxWidth: '900px',
+        margin: '0 auto',
+        width: '100%'
+      }}>
+        <Box sx={{ marginBottom: isMobile ? '1.5rem' : '2rem' }}>
+          <Typography
+            sx={{
+              color: theme.palette.text.primary,
+              marginBottom: '0.5rem',
+              fontWeight: 600
+            }}
+            variant={isMobile ? "h5" : "h4"}
+          >
+            Settings
+          </Typography>
+          <Typography
+            sx={{
+              color: theme.palette.text.secondary,
+              fontSize: '0.9rem'
+            }}
+          >
+            Manage your preferences, budgets, and loans
+          </Typography>
+        </Box>
 
         <Paper
           sx={{
             bgcolor: theme.palette.background.paper,
-            padding: '2rem',
-            marginBottom: '2rem',
+            padding: isMobile ? '1.5rem' : '2rem',
+            marginBottom: isMobile ? '1.5rem' : '2rem',
+            borderRadius: '12px',
+            boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: `0 4px 16px ${theme.palette.text.primary}15`,
+            },
           }}
         >
-          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
-            Currency
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <CurrencyExchangeIcon sx={{ color: theme.palette.primary.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Currency
+            </Typography>
+          </Box>
           <FormControl fullWidth sx={{ maxWidth: '400px' }}>
             <InputLabel
               sx={{
@@ -398,25 +436,36 @@ export default function SettingsPage() {
             sx={{
               bgcolor: theme.palette.error.main,
               color: theme.palette.error.contrastText,
-              padding: '1rem',
-              marginBottom: '2rem',
+              padding: '1rem 1.5rem',
+              marginBottom: isMobile ? '1.5rem' : '2rem',
+              borderRadius: '8px',
+              boxShadow: `0 2px 8px ${theme.palette.error.main}30`,
             }}
           >
-            <Typography>{error}</Typography>
+            <Typography sx={{ fontWeight: 500 }}>{error}</Typography>
           </Paper>
         )}
 
         <Paper
           sx={{
             bgcolor: theme.palette.background.paper,
-            padding: '2rem',
-            marginBottom: '2rem',
+            padding: isMobile ? '1.5rem' : '2rem',
+            marginBottom: isMobile ? '1.5rem' : '2rem',
+            borderRadius: '12px',
+            boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: `0 4px 16px ${theme.palette.text.primary}15`,
+            },
           }}
         >
-          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
-            Create New Budget
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <AddCircleOutlineIcon sx={{ color: theme.palette.success.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Create New Budget
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: isMobile ? 'column' : 'row', marginBottom: '2rem' }}>
             <TextField
               label="Budget Year"
               variant="outlined"
@@ -428,10 +477,13 @@ export default function SettingsPage() {
                 }
               }}
               disabled={creating}
+              placeholder="e.g., 2025"
               sx={{
                 flex: 1,
+                width: isMobile ? '100%' : 'auto',
                 '& .MuiOutlinedInput-root': {
                   color: theme.palette.text.primary,
+                  borderRadius: '8px',
                   '& fieldset': {
                     borderColor: theme.palette.secondary.main,
                   },
@@ -440,6 +492,7 @@ export default function SettingsPage() {
                   },
                   '&.Mui-focused fieldset': {
                     borderColor: theme.palette.primary.main,
+                    borderWidth: '2px',
                   },
                 },
                 '& .MuiInputLabel-root': {
@@ -454,80 +507,145 @@ export default function SettingsPage() {
               variant="contained"
               onClick={handleCreateBudget}
               disabled={creating || !budgetYear || !isLoaded || !user?.id}
+              startIcon={creating ? <CircularProgress size={20} sx={{ color: 'inherit' }} /> : <AddCircleOutlineIcon />}
               sx={{
-                bgcolor: theme.palette.primary.main,
-                color: theme.palette.primary.contrastText,
+                bgcolor: theme.palette.success.main,
+                color: theme.palette.success.contrastText || theme.palette.text.primary,
+                borderRadius: '8px',
+                padding: '10px 24px',
+                textTransform: 'none',
+                fontWeight: 600,
+                width: isMobile ? '100%' : 'auto',
                 '&:hover': {
-                  bgcolor: theme.palette.primary.dark,
+                  bgcolor: theme.palette.success.dark,
+                  transform: 'translateY(-2px)',
+                  boxShadow: `0 4px 12px ${theme.palette.success.main}40`,
                 },
                 '&:disabled': {
                   bgcolor: theme.palette.background.default,
                   color: theme.palette.text.secondary,
                 },
+                transition: 'all 0.2s ease',
               }}
             >
-              {creating ? <CircularProgress size={24} /> : 'Create'}
+              {creating ? 'Creating...' : 'Create Budget'}
             </Button>
           </Box>
-        </Paper>
 
-        <Paper
-          sx={{
-            bgcolor: theme.palette.background.paper,
-            padding: '2rem',
-          }}
-        >
-          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
-            Existing Budgets
-          </Typography>
+          <Divider sx={{ marginBottom: '1.5rem', opacity: 0.3 }} />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <FolderIcon sx={{ color: theme.palette.info.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Existing Budgets
+            </Typography>
+            {budgets.length > 0 && (
+              <Chip
+                label={budgets.length}
+                size="small"
+                sx={{
+                  bgcolor: theme.palette.info.main,
+                  color: theme.palette.info.contrastText || theme.palette.text.primary,
+                  fontWeight: 600
+                }}
+              />
+            )}
+          </Box>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
               <CircularProgress sx={{ color: theme.palette.primary.main }} />
             </Box>
           ) : (
-            <List>
+            <List sx={{ padding: 0 }}>
               {budgets.length === 0 ? (
-                <ListItem>
-                  <ListItemText
-                    primary="No budgets created yet"
-                    sx={{ color: theme.palette.text.secondary }}
-                  />
-                </ListItem>
+                <Box sx={{
+                  padding: '2rem',
+                  textAlign: 'center',
+                  color: theme.palette.text.secondary
+                }}>
+                  <FolderIcon sx={{ fontSize: '3rem', opacity: 0.3, marginBottom: '1rem' }} />
+                  <Typography>No budgets created yet</Typography>
+                  <Typography variant="body2" sx={{ marginTop: '0.5rem', opacity: 0.7 }}>
+                    Create your first budget above
+                  </Typography>
+                </Box>
               ) : (
-                budgets.map((year) => (
-                  <ListItem
-                    key={year}
-                    secondaryAction={
-                      <IconButton
-                        edge="end"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(year);
-                        }}
-                        sx={{
-                          color: theme.palette.error.main,
-                          '&:hover': {
-                            bgcolor: theme.palette.error.main,
-                            color: theme.palette.error.contrastText,
-                          },
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    }
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: theme.palette.background.default,
-                      },
-                    }}
-                    onClick={() => handleNavigateToBudget(year)}
-                  >
-                    <ListItemText
-                      primary={`Budget ${year}`}
-                      sx={{ color: theme.palette.text.primary }}
-                    />
-                  </ListItem>
+                budgets.map((year, index) => (
+                  <Box key={year}>
+                    <ListItem
+                      secondaryAction={
+                        <IconButton
+                          edge="end"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(year);
+                          }}
+                          sx={{
+                            color: theme.palette.error.main,
+                            '&:hover': {
+                              bgcolor: theme.palette.error.main,
+                              color: theme.palette.error.contrastText,
+                              transform: 'scale(1.1)',
+                            },
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      }
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        marginBottom: index < budgets.length - 1 ? '0.5rem' : 0,
+                        padding: '12px 16px',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          bgcolor: theme.palette.background.default,
+                          transform: 'translateX(4px)',
+                          boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+                        },
+                      }}
+                      onClick={() => handleNavigateToBudget(year)}
+                    >
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        flex: 1
+                      }}>
+                        <FolderIcon sx={{
+                          color: theme.palette.info.main,
+                          fontSize: '1.25rem'
+                        }} />
+                        <ListItemText
+                          primary={
+                            <Typography sx={{
+                              color: theme.palette.text.primary,
+                              fontWeight: 500,
+                              fontSize: '1rem'
+                            }}>
+                              Budget {year}
+                            </Typography>
+                          }
+                          secondary={
+                            <Typography sx={{
+                              color: theme.palette.text.secondary,
+                              fontSize: '0.85rem',
+                              marginTop: '2px'
+                            }}>
+                              Click to view
+                            </Typography>
+                          }
+                        />
+                      </Box>
+                    </ListItem>
+                    {index < budgets.length - 1 && (
+                      <Divider sx={{
+                        marginLeft: '56px',
+                        opacity: 0.3
+                      }} />
+                    )}
+                  </Box>
                 ))
               )}
             </List>
@@ -537,67 +655,134 @@ export default function SettingsPage() {
         <Paper
           sx={{
             bgcolor: theme.palette.background.paper,
-            padding: '2rem',
-            marginBottom: '2rem',
+            padding: isMobile ? '1.5rem' : '2rem',
+            marginBottom: isMobile ? '1.5rem' : '2rem',
+            borderRadius: '12px',
+            boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: `0 4px 16px ${theme.palette.text.primary}15`,
+            },
           }}
         >
-          <Typography sx={{ color: theme.palette.text.primary, marginBottom: '1rem' }} variant="h6">
-            Existing Loans
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <CreditCardIcon sx={{ color: theme.palette.warning.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Existing Loans
+            </Typography>
+            {loans.length > 0 && (
+              <Chip
+                label={loans.length}
+                size="small"
+                sx={{
+                  bgcolor: theme.palette.warning.main,
+                  color: theme.palette.warning.contrastText || theme.palette.text.primary,
+                  fontWeight: 600
+                }}
+              />
+            )}
+          </Box>
           {loansLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
               <CircularProgress sx={{ color: theme.palette.primary.main }} />
             </Box>
           ) : (
-            <List>
+            <List sx={{ padding: 0 }}>
               {loans.length === 0 ? (
-                <ListItem>
-                  <ListItemText
-                    primary="No loans created yet"
-                    sx={{ color: theme.palette.text.secondary }}
-                  />
-                </ListItem>
+                <Box sx={{
+                  padding: '2rem',
+                  textAlign: 'center',
+                  color: theme.palette.text.secondary
+                }}>
+                  <CreditCardIcon sx={{ fontSize: '3rem', opacity: 0.3, marginBottom: '1rem' }} />
+                  <Typography>No loans created yet</Typography>
+                  <Typography variant="body2" sx={{ marginTop: '0.5rem', opacity: 0.7 }}>
+                    Create loans from the Loans page
+                  </Typography>
+                </Box>
               ) : (
-                loans.map((loan) => (
-                  <ListItem
-                    key={loan.id}
-                    secondaryAction={
-                      <IconButton
-                        edge="end"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleLoanDeleteClick(loan);
-                        }}
-                        sx={{
-                          color: theme.palette.error.main,
-                          '&:hover': {
-                            bgcolor: theme.palette.error.main,
-                            color: theme.palette.error.contrastText,
-                          },
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    }
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: theme.palette.background.default,
-                      },
-                    }}
-                    onClick={() => navigate('/loans')}
-                  >
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <AccountBalanceIcon sx={{ fontSize: '1rem', color: theme.palette.info.main }} />
-                          <span>{loan.name}</span>
-                        </Box>
+                loans.map((loan, index) => (
+                  <Box key={loan.id}>
+                    <ListItem
+                      secondaryAction={
+                        <IconButton
+                          edge="end"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLoanDeleteClick(loan);
+                          }}
+                          sx={{
+                            color: theme.palette.error.main,
+                            '&:hover': {
+                              bgcolor: theme.palette.error.main,
+                              color: theme.palette.error.contrastText,
+                              transform: 'scale(1.1)',
+                            },
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
                       }
-                      secondary={loan.createdAt ? `Created: ${new Date(loan.createdAt).toLocaleDateString()}` : undefined}
-                      sx={{ color: theme.palette.text.primary }}
-                    />
-                  </ListItem>
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: '8px',
+                        marginBottom: index < loans.length - 1 ? '0.5rem' : 0,
+                        padding: '12px 16px',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          bgcolor: theme.palette.background.default,
+                          transform: 'translateX(4px)',
+                          boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+                        },
+                      }}
+                      onClick={() => navigate('/loans')}
+                    >
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        flex: 1
+                      }}>
+                        <AccountBalanceIcon sx={{
+                          fontSize: '1.25rem',
+                          color: theme.palette.info.main
+                        }} />
+                        <ListItemText
+                          primary={
+                            <Typography sx={{
+                              color: theme.palette.text.primary,
+                              fontWeight: 500,
+                              fontSize: '1rem'
+                            }}>
+                              {loan.name}
+                            </Typography>
+                          }
+                          secondary={
+                            <Typography sx={{
+                              color: theme.palette.text.secondary,
+                              fontSize: '0.85rem',
+                              marginTop: '2px'
+                            }}>
+                              {loan.createdAt
+                                ? `Created: ${new Date(loan.createdAt).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}`
+                                : 'Click to view details'}
+                            </Typography>
+                          }
+                        />
+                      </Box>
+                    </ListItem>
+                    {index < loans.length - 1 && (
+                      <Divider sx={{
+                        marginLeft: '56px',
+                        opacity: 0.3
+                      }} />
+                    )}
+                  </Box>
                 ))
               )}
             </List>
@@ -612,10 +797,19 @@ export default function SettingsPage() {
             sx: {
               bgcolor: theme.palette.background.paper,
               color: theme.palette.text.primary,
+              borderRadius: '12px',
+              minWidth: isMobile ? 'auto' : '400px',
             }
           }}
         >
-          <DialogTitle sx={{ color: theme.palette.text.primary }}>
+          <DialogTitle sx={{
+            color: theme.palette.text.primary,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5
+          }}>
+            <DeleteIcon sx={{ color: theme.palette.error.main }} />
             Delete Budget
           </DialogTitle>
           <DialogContent>
@@ -623,11 +817,15 @@ export default function SettingsPage() {
               Are you sure you want to delete Budget {budgetToDelete}? This action cannot be undone and will delete all associated data.
             </DialogContentText>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ padding: '1.5rem', gap: 1 }}>
             <Button
               onClick={handleDeleteCancel}
               sx={{
                 color: theme.palette.text.secondary,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                padding: '8px 20px',
                 '&:hover': {
                   bgcolor: theme.palette.background.default,
                 },
@@ -642,9 +840,16 @@ export default function SettingsPage() {
               sx={{
                 bgcolor: theme.palette.error.main,
                 color: theme.palette.error.contrastText,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '8px 20px',
                 '&:hover': {
                   bgcolor: theme.palette.error.dark,
+                  transform: 'translateY(-1px)',
+                  boxShadow: `0 4px 12px ${theme.palette.error.main}40`,
                 },
+                transition: 'all 0.2s ease',
               }}
             >
               Delete
@@ -660,10 +865,19 @@ export default function SettingsPage() {
             sx: {
               bgcolor: theme.palette.background.paper,
               color: theme.palette.text.primary,
+              borderRadius: '12px',
+              minWidth: isMobile ? 'auto' : '400px',
             }
           }}
         >
-          <DialogTitle sx={{ color: theme.palette.text.primary }}>
+          <DialogTitle sx={{
+            color: theme.palette.text.primary,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5
+          }}>
+            <DeleteIcon sx={{ color: theme.palette.error.main }} />
             Delete Loan
           </DialogTitle>
           <DialogContent>
@@ -671,11 +885,15 @@ export default function SettingsPage() {
               Are you sure you want to delete the loan "{loanToDelete?.name}"? This action cannot be undone and will remove all payment history associated with this loan.
             </DialogContentText>
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ padding: '1.5rem', gap: 1 }}>
             <Button
               onClick={handleLoanDeleteCancel}
               sx={{
                 color: theme.palette.text.secondary,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                padding: '8px 20px',
                 '&:hover': {
                   bgcolor: theme.palette.background.default,
                 },
@@ -690,9 +908,16 @@ export default function SettingsPage() {
               sx={{
                 bgcolor: theme.palette.error.main,
                 color: theme.palette.error.contrastText,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '8px 20px',
                 '&:hover': {
                   bgcolor: theme.palette.error.dark,
+                  transform: 'translateY(-1px)',
+                  boxShadow: `0 4px 12px ${theme.palette.error.main}40`,
                 },
+                transition: 'all 0.2s ease',
               }}
             >
               Delete
