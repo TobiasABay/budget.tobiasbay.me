@@ -229,7 +229,6 @@ export default function Budget() {
                 const loanItems = normalizedItems.filter((item: LineItem) => item.isLoan);
                 if (loanItems.length > 0) {
                 } else {
-                    console.log('No loan items found in loaded data. All items:', normalizedItems);
                 }
                 setLineItems(normalizedItems);
             }

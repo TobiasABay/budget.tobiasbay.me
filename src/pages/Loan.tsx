@@ -36,6 +36,7 @@ interface LoanPayment {
     loanName: string;
     totalPayment: number;
     remaining: number;
+    createdAt?: string;
 }
 
 export default function Loan() {
@@ -224,6 +225,7 @@ export default function Loan() {
                         loanName: loan.name,
                         totalPayment,
                         remaining,
+                        createdAt: loan.createdAt,
                     });
                 }
             }
@@ -319,11 +321,22 @@ export default function Loan() {
                                         bgcolor: theme.palette.primary.main,
                                         color: theme.palette.primary.contrastText,
                                         fontWeight: 'bold',
-                                        width: '25%',
+                                        width: '20%',
                                         padding: '12px 8px',
                                     }}
                                 >
                                     Remaining ({currencyText})
+                                </TableCell>
+                                <TableCell
+                                    sx={{
+                                        bgcolor: theme.palette.primary.main,
+                                        color: theme.palette.primary.contrastText,
+                                        fontWeight: 'bold',
+                                        width: '15%',
+                                        padding: '12px 8px',
+                                    }}
+                                >
+                                    Created
                                 </TableCell>
                                 <TableCell
                                     sx={{
@@ -340,7 +353,7 @@ export default function Loan() {
                         <TableBody>
                             {loanPayments.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={5} align="center" sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', padding: '2rem' }}>
+                                    <TableCell colSpan={6} align="center" sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', padding: '2rem' }}>
                                         No loan payments found. Create a loan and link expenses to it in the budget page.
                                     </TableCell>
                                 </TableRow>
@@ -358,6 +371,9 @@ export default function Loan() {
                                         </TableCell>
                                         <TableCell align="right" sx={{ color: payment.remaining > 0 ? theme.palette.info.main : theme.palette.text.primary, padding: '12px 8px', fontWeight: payment.remaining > 0 ? 'bold' : 'normal' }}>
                                             {formatCurrency(payment.remaining, currency)}
+                                        </TableCell>
+                                        <TableCell sx={{ color: theme.palette.text.primary, padding: '12px 8px' }}>
+                                            {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString() : '-'}
                                         </TableCell>
                                         <TableCell sx={{ padding: '4px' }}>
                                             {index === 0 || loanPayments[index - 1].loanId !== payment.loanId ? (
