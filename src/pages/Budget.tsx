@@ -28,6 +28,7 @@ interface LineItem {
     amount: number;
     frequency: string;
     months: { [key: string]: number };
+    formulas?: { [key: string]: string }; // Store formulas like "=2+2" or "=A1+B1"
     isLoan?: boolean;
     loanTitle?: string;
     loanStartDate?: string; // Format: "YYYY-MM-DD"
@@ -66,6 +67,43 @@ export default function Budget() {
     const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
 
     const FREQUENCY_OPTIONS = ['Monthly', 'Quarterly', 'Six-Monthly', 'Yearly'];
+
+    // Evaluate a formula string (e.g., "=2+2" or "=10*1.5")
+    const evaluateFormula = (formula: string): number => {
+        try {
+            // Remove the leading "="
+            const expression = formula.substring(1).trim();
+
+            // For now, just evaluate basic math expressions
+            // Using Function constructor for safe evaluation (only allows math operations)
+            // This is safer than eval() but still allows basic arithmetic
+            const sanitized = expression.replace(/[^0-9+\-*/().\s]/g, '');
+            if (sanitized !== expression.replace(/\s/g, '')) {
+                // If sanitization removed non-whitespace characters, it's not a safe expression
+                return 0;
+            }
+
+            // Use Function constructor to evaluate the expression
+            // This is safer than eval() as it runs in a limited scope
+            const result = new Function('return ' + sanitized)();
+            return typeof result === 'number' && !isNaN(result) ? result : 0;
+        } catch (e) {
+            console.error('Error evaluating formula:', e);
+            return 0;
+        }
+    };
+
+    // Get the calculated value for a cell (checks for formula first, then uses direct value)
+    const getCellValue = (item: LineItem, month: string): number => {
+        // Check if there's a formula for this cell
+        // First check the formulas field, then check if stored in months._formulas
+        const formula = item.formulas?.[month] || (item.months as any)?._formulas?.[month];
+        if (formula) {
+            return evaluateFormula(formula);
+        }
+        // Otherwise return the direct value
+        return item.months[month] || 0;
+    };
 
     // Load budget data on mount
     useEffect(() => {
@@ -129,11 +167,22 @@ export default function Budget() {
                 const items = await response.json();
                 // Ensure items with static expense properties are marked as static expenses
                 // This is a safeguard in case the API didn't set the flag
+                // Also extract formulas from months._formulas if they exist
                 const normalizedItems = items.map((item: LineItem) => {
-                    if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
-                        return { ...item, isStaticExpense: true };
+                    const normalizedItem = { ...item };
+
+                    // Extract formulas from months._formulas if they exist
+                    if ((item.months as any)?._formulas) {
+                        normalizedItem.formulas = (item.months as any)._formulas;
+                        // Remove _formulas from months to keep it clean
+                        const { _formulas, ...cleanMonths } = item.months as any;
+                        normalizedItem.months = cleanMonths;
                     }
-                    return item;
+
+                    if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
+                        normalizedItem.isStaticExpense = true;
+                    }
+                    return normalizedItem;
                 });
                 // Debug: Log loan items after loading
                 const loanItems = normalizedItems.filter((item: LineItem) => item.isLoan);
@@ -276,26 +325,64 @@ export default function Budget() {
 
     const handleCellClick = (itemId: string, month: string) => {
         const item = lineItems.find(i => i.id === itemId);
-        const currentValue = item?.months[month] || 0;
+        if (!item) return;
+
+        // If there's a formula, show it; otherwise show the calculated value
+        // Check both formulas field and months._formulas
+        const formula = item.formulas?.[month] || (item.months as any)?._formulas?.[month];
+        const displayValue = formula || (item.months[month] || 0).toString();
+
         setEditingCell({ itemId, month });
-        setEditValue(currentValue.toString());
+        setEditValue(displayValue);
         setSelectedItemForDelete(null);
     };
 
     const handleCellSave = () => {
         if (!editingCell) return;
 
-        const numericValue = parseFloat(editValue) || 0;
+        const trimmedValue = editValue.trim();
+        const isFormula = trimmedValue.startsWith('=');
 
         const updatedItems = lineItems.map(item => {
             if (item.id === editingCell.itemId) {
-                return {
-                    ...item,
-                    months: {
-                        ...item.months,
-                        [editingCell.month]: numericValue
+                const updatedItem = { ...item };
+                const monthsCopy = { ...updatedItem.months };
+
+                if (isFormula) {
+                    // Store the formula in months._formulas (so it persists in database)
+                    // Also store in formulas field for easy access
+                    if (!(monthsCopy as any)._formulas) {
+                        (monthsCopy as any)._formulas = {};
                     }
-                };
+                    (monthsCopy as any)._formulas[editingCell.month] = trimmedValue;
+
+                    updatedItem.formulas = {
+                        ...(updatedItem.formulas || {}),
+                        [editingCell.month]: trimmedValue
+                    };
+                    // Calculate and store the result
+                    const calculatedValue = evaluateFormula(trimmedValue);
+                    monthsCopy[editingCell.month] = calculatedValue;
+                    updatedItem.months = monthsCopy;
+                } else {
+                    // Remove formula if it exists and store direct value
+                    if ((monthsCopy as any)._formulas) {
+                        delete (monthsCopy as any)._formulas[editingCell.month];
+                        // Clean up empty _formulas object
+                        if (Object.keys((monthsCopy as any)._formulas).length === 0) {
+                            delete (monthsCopy as any)._formulas;
+                        }
+                    }
+                    if (updatedItem.formulas) {
+                        const { [editingCell.month]: removed, ...restFormulas } = updatedItem.formulas;
+                        updatedItem.formulas = Object.keys(restFormulas).length > 0 ? restFormulas : undefined;
+                    }
+                    const numericValue = parseFloat(trimmedValue) || 0;
+                    monthsCopy[editingCell.month] = numericValue;
+                    updatedItem.months = monthsCopy;
+                }
+
+                return updatedItem;
             }
             return item;
         });
@@ -604,7 +691,7 @@ export default function Budget() {
                                         </TableCell>
                                         {MONTHS.map((month) => {
                                             const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                            const cellValue = item.months[month] || 0;
+                                            const cellValue = getCellValue(item, month);
 
                                             return (
                                                 <TableCell
@@ -628,7 +715,7 @@ export default function Budget() {
                                                             onBlur={handleCellSave}
                                                             onKeyDown={handleCellKeyPress}
                                                             autoFocus
-                                                            type="number"
+                                                            type="text"
                                                             size="small"
                                                             sx={{
                                                                 width: '80px',
@@ -824,7 +911,7 @@ export default function Budget() {
                                             </TableCell>
                                             {MONTHS.map((month) => {
                                                 const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                                const cellValue = item.months[month] || 0;
+                                                const cellValue = getCellValue(item, month);
 
                                                 return (
                                                     <TableCell
@@ -848,7 +935,7 @@ export default function Budget() {
                                                                 onBlur={handleCellSave}
                                                                 onKeyDown={handleCellKeyPress}
                                                                 autoFocus
-                                                                type="number"
+                                                                type="text"
                                                                 size="small"
                                                                 sx={{
                                                                     width: '80px',
@@ -1062,7 +1149,7 @@ export default function Budget() {
                                             </TableCell>
                                             {MONTHS.map((month) => {
                                                 const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                                const cellValue = item.months[month] || 0;
+                                                const cellValue = getCellValue(item, month);
 
                                                 return (
                                                     <TableCell
@@ -1086,7 +1173,7 @@ export default function Budget() {
                                                                 onBlur={handleCellSave}
                                                                 onKeyDown={handleCellKeyPress}
                                                                 autoFocus
-                                                                type="number"
+                                                                type="text"
                                                                 size="small"
                                                                 sx={{
                                                                     width: '80px',

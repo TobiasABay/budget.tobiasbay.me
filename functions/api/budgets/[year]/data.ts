@@ -15,6 +15,7 @@ interface BudgetItem {
   amount: number;
   frequency: string;
   months: { [key: string]: number };
+  formulas?: { [key: string]: string };
   isLoan?: boolean;
   loanTitle?: string;
   loanStartDate?: string;
