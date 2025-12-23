@@ -29,13 +29,24 @@ interface LineItem {
     frequency: string;
     months: { [key: string]: number };
     formulas?: { [key: string]: string }; // Store formulas like "=2+2" or "=A1+B1"
-    isLoan?: boolean;
-    loanTitle?: string;
-    loanStartDate?: string; // Format: "YYYY-MM-DD"
-    loanValue?: number;
+    linkedLoanId?: string; // ID of the loan this expense is linked to
+    isLoan?: boolean; // Deprecated: kept for backward compatibility
+    loanTitle?: string; // Deprecated: kept for backward compatibility
+    loanStartDate?: string; // Deprecated: kept for backward compatibility
+    loanValue?: number; // Deprecated: kept for backward compatibility
     isStaticExpense?: boolean;
     staticExpenseDate?: string; // Format: "YYYY-MM-DD"
     staticExpensePrice?: number;
+}
+
+interface Loan {
+    id: string;
+    userId: string;
+    name: string;
+    amount: number;
+    startDate: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export default function Budget() {
@@ -52,6 +63,8 @@ export default function Budget() {
     const [staticExpenseName, setStaticExpenseName] = useState('');
     const [staticExpenseDate, setStaticExpenseDate] = useState('');
     const [staticExpensePrice, setStaticExpensePrice] = useState('');
+    const [linkedLoanId, setLinkedLoanId] = useState<string>('');
+    const [loans, setLoans] = useState<Loan[]>([]);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -105,6 +118,13 @@ export default function Budget() {
         return item.months[month] || 0;
     };
 
+    // Load loans on mount
+    useEffect(() => {
+        if (isLoaded && user?.id) {
+            loadLoans();
+        }
+    }, [isLoaded, user?.id]);
+
     // Load budget data on mount
     useEffect(() => {
         if (isLoaded && user?.id && year) {
@@ -148,6 +168,27 @@ export default function Budget() {
             return () => clearTimeout(timeoutId);
         }
     }, [lineItems, isLoaded, user?.id, year]);
+
+    const loadLoans = async () => {
+        if (!user?.id) return;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/loans`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': user.id,
+                },
+            });
+
+            if (response.ok) {
+                const loansData = await response.json();
+                setLoans(loansData);
+            }
+        } catch (error) {
+            console.error('Error loading loans:', error);
+        }
+    };
 
     const loadBudgetData = async () => {
         if (!user?.id || !year) return;
@@ -261,6 +302,7 @@ export default function Budget() {
         setStaticExpenseName('');
         setStaticExpenseDate('');
         setStaticExpensePrice('');
+        setLinkedLoanId('');
         handleCloseMenu();
     };
 
@@ -276,6 +318,7 @@ export default function Budget() {
         setStaticExpenseName('');
         setStaticExpenseDate('');
         setStaticExpensePrice('');
+        setLinkedLoanId('');
     };
 
     const handleCreateItem = () => {
@@ -315,6 +358,9 @@ export default function Budget() {
             amount: 0,
             frequency: 'Monthly',
             months: months,
+            ...(linkedLoanId && {
+                linkedLoanId: linkedLoanId
+            }),
             ...(isLoan && {
                 isLoan: true,
                 loanTitle: loanTitle.trim(),
@@ -1728,38 +1774,70 @@ export default function Budget() {
                                     />
                                 </>
                             ) : (
-                                <TextField
-                                    label="Name"
-                                    value={itemName}
-                                    onChange={(e) => setItemName(e.target.value)}
-                                    fullWidth
-                                    autoFocus
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter' && itemName.trim() && selectedType) {
-                                            handleCreateItem();
-                                        }
-                                    }}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            color: theme.palette.text.primary,
-                                            '& fieldset': {
-                                                borderColor: theme.palette.secondary.main,
+                                <>
+                                    <TextField
+                                        label="Name"
+                                        value={itemName}
+                                        onChange={(e) => setItemName(e.target.value)}
+                                        fullWidth
+                                        autoFocus
+                                        onKeyPress={(e) => {
+                                            if (e.key === 'Enter' && itemName.trim() && selectedType) {
+                                                handleCreateItem();
+                                            }
+                                        }}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                color: theme.palette.text.primary,
+                                                '& fieldset': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused fieldset': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
                                             },
-                                            '&:hover fieldset': {
-                                                borderColor: theme.palette.primary.main,
+                                            '& .MuiInputLabel-root': {
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
                                             },
-                                            '&.Mui-focused fieldset': {
-                                                borderColor: theme.palette.primary.main,
-                                            },
-                                        },
-                                        '& .MuiInputLabel-root': {
-                                            color: theme.palette.text.secondary,
-                                            '&.Mui-focused': {
-                                                color: theme.palette.primary.main,
-                                            },
-                                        },
-                                    }}
-                                />
+                                        }}
+                                    />
+                                    {selectedType === 'expense' && loans.length > 0 && (
+                                        <FormControl fullWidth>
+                                            <Select
+                                                value={linkedLoanId}
+                                                onChange={(e) => setLinkedLoanId(e.target.value)}
+                                                displayEmpty
+                                                sx={{
+                                                    color: theme.palette.text.primary,
+                                                    '& .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.secondary.main,
+                                                    },
+                                                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.primary.main,
+                                                    },
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.primary.main,
+                                                    },
+                                                }}
+                                            >
+                                                <MenuItem value="">
+                                                    <em>No loan (optional)</em>
+                                                </MenuItem>
+                                                {loans.map((loan) => (
+                                                    <MenuItem key={loan.id} value={loan.id}>
+                                                        {loan.name}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    )}
+                                </>
                             )}
                         </Box>
                     </DialogContent>

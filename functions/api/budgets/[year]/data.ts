@@ -16,6 +16,7 @@ interface BudgetItem {
   frequency: string;
   months: { [key: string]: number | { [key: string]: string } }; // Allow nested _formulas object
   formulas?: { [key: string]: string };
+  linkedLoanId?: string;
   isLoan?: boolean;
   loanTitle?: string;
   loanStartDate?: string;
@@ -130,24 +131,53 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (request.method === 'GET') {
-      // Always try to select loan_data and static_expense_data (columns exist)
+      // Always try to select loan_data, static_expense_data, and linked_loan_id (columns may exist)
       let result;
       try {
         result = await env.budget_db
-          .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
+          .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id FROM budget_items WHERE user_id = ? AND year = ?')
           .bind(userId, year)
           .all();
       } catch (e: any) {
-        // If columns don't exist, try with just loan_data
+        // If columns don't exist, try with fewer columns
         const errorMsg = e?.message || String(e);
-        if (errorMsg.includes('no such column: static_expense_data')) {
+        if (errorMsg.includes('no such column: linked_loan_id')) {
+          try {
+            result = await env.budget_db
+              .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
+              .bind(userId, year)
+              .all();
+          } catch (e2: any) {
+            const errorMsg2 = e2?.message || String(e2);
+            if (errorMsg2.includes('no such column: static_expense_data')) {
+              try {
+                result = await env.budget_db
+                  .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+                  .bind(userId, year)
+                  .all();
+              } catch (e3: any) {
+                const errorMsg3 = e3?.message || String(e3);
+                if (errorMsg3.includes('no such column: loan_data')) {
+                  console.log('loan_data column not found, using fallback query');
+                  result = await env.budget_db
+                    .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
+                    .bind(userId, year)
+                    .all();
+                } else {
+                  throw e3;
+                }
+              }
+            } else {
+              throw e2;
+            }
+          }
+        } else if (errorMsg.includes('no such column: static_expense_data')) {
           try {
             result = await env.budget_db
               .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
               .bind(userId, year)
               .all();
           } catch (e2: any) {
-            // If loan_data also doesn't exist, fall back to basic query
             const errorMsg2 = e2?.message || String(e2);
             if (errorMsg2.includes('no such column: loan_data')) {
               console.log('loan_data column not found, using fallback query');
@@ -216,6 +246,12 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           }
         }
 
+        // Get linked_loan_id if it exists
+        const hasLinkedLoanIdColumn = 'linked_loan_id' in row;
+        if (hasLinkedLoanIdColumn && row.linked_loan_id !== null && row.linked_loan_id !== undefined && row.linked_loan_id !== '') {
+          item.linkedLoanId = row.linked_loan_id as string;
+        }
+
         return item;
       });
 
@@ -264,10 +300,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const monthsData = item.months || {};
         const monthsJson = JSON.stringify(monthsData);
 
-        // Always try to insert with loan_data and static_expense_data (columns exist)
+        // Always try to insert with loan_data, static_expense_data, and linked_loan_id (columns may exist)
         try {
           await env.budget_db
-            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(
               budgetId,
               userId,
@@ -278,13 +314,78 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               item.frequency,
               monthsJson,
               loanData,
-              staticExpenseData
+              staticExpenseData,
+              item.linkedLoanId || null
             )
             .run();
         } catch (e: any) {
-          // If static_expense_data column doesn't exist, try with just loan_data
+          // If linked_loan_id column doesn't exist, try without it
           const errorMsg = e?.message || String(e);
-          if (errorMsg.includes('no such column: static_expense_data')) {
+          if (errorMsg.includes('no such column: linked_loan_id')) {
+            try {
+              await env.budget_db
+                .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .bind(
+                  budgetId,
+                  userId,
+                  year,
+                  item.id,
+                  item.name,
+                  item.type,
+                  item.frequency,
+                  monthsJson,
+                  loanData,
+                  staticExpenseData
+                )
+                .run();
+            } catch (e2: any) {
+              // If static_expense_data column doesn't exist, try with just loan_data
+              const errorMsg2 = e2?.message || String(e2);
+              if (errorMsg2.includes('no such column: static_expense_data')) {
+                try {
+                  await env.budget_db
+                    .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                    .bind(
+                      budgetId,
+                      userId,
+                      year,
+                      item.id,
+                      item.name,
+                      item.type,
+                      item.frequency,
+                      monthsJson,
+                      loanData
+                    )
+                    .run();
+                } catch (e3: any) {
+                  // If loan_data also doesn't exist, fall back to insert without it
+                  const errorMsg3 = e3?.message || String(e3);
+                  if (errorMsg3.includes('no such column: loan_data')) {
+                    console.warn(`Item "${item.name}" cannot be saved with loan/static expense data. Columns don't exist.`);
+                    await env.budget_db
+                      .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+                      .bind(
+                        budgetId,
+                        userId,
+                        year,
+                        item.id,
+                        item.name,
+                        item.type,
+                        item.frequency,
+                        monthsJson
+                      )
+                      .run();
+                  } else {
+                    console.error('Error inserting item:', e3, 'Item:', item);
+                    throw e3;
+                  }
+                }
+              } else {
+                console.error('Error inserting item:', e2, 'Item:', item);
+                throw e2;
+              }
+            }
+          } else if (errorMsg.includes('no such column: static_expense_data')) {
             try {
               await env.budget_db
                 .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -301,10 +402,9 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                 )
                 .run();
             } catch (e2: any) {
-              // If loan_data also doesn't exist, fall back to insert without it
               const errorMsg2 = e2?.message || String(e2);
               if (errorMsg2.includes('no such column: loan_data')) {
-                console.warn(`Item "${item.name}" cannot be saved with loan/static expense data. Columns don't exist.`);
+                console.warn(`Loan item "${item.name}" cannot be saved with loan data. Column doesn't exist.`);
                 await env.budget_db
                   .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
                   .bind(
