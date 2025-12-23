@@ -771,9 +771,9 @@ export default function Budget() {
                             {lineItems
                                 .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense)
                                 .sort((a, b) => {
-                                    // Sort by linkedLoanId first (loans first), then alphabetically
-                                    if (a.linkedLoanId && !b.linkedLoanId) return -1;
-                                    if (!a.linkedLoanId && b.linkedLoanId) return 1;
+                                    // Sort by regular expenses first (no linkedLoanId), then loan-linked expenses, then alphabetically
+                                    if (!a.linkedLoanId && b.linkedLoanId) return -1;
+                                    if (a.linkedLoanId && !b.linkedLoanId) return 1;
                                     return a.name.localeCompare(b.name);
                                 })
                                 .map((item) => {
@@ -885,7 +885,7 @@ export default function Budget() {
                                         </TableRow>
                                     );
                                 })}
-                            {/* Static Expenses Summary Row (above loans) */}
+                            {/* Fun Expenses Summary Row */}
                             {(() => {
                                 const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
                                 if (staticExpenses.length === 0) return null;
@@ -933,7 +933,7 @@ export default function Budget() {
                                     </TableRow>
                                 );
                             })()}
-                            {/* Loan Items (at bottom of expenses) */}
+                            {/* Loan Items */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && item.isLoan)
                                 .sort((a, b) => {
