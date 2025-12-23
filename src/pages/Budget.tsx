@@ -570,18 +570,6 @@ export default function Budget() {
                         >
                             Add Fun Expense
                         </MenuItem>
-                        <MenuItem
-                            onClick={() => handleOpenModal('loan')}
-                            sx={{
-                                color: theme.palette.info.main,
-                                '&:hover': {
-                                    bgcolor: theme.palette.info.main,
-                                    color: theme.palette.info.contrastText,
-                                },
-                            }}
-                        >
-                            Add Loan
-                        </MenuItem>
                     </Menu>
                     {saving && (
                         <CircularProgress size={24} sx={{ color: theme.palette.primary.main }} />
@@ -861,7 +849,7 @@ export default function Budget() {
                                             <TableCell
                                                 onClick={() => handleNameCellClick(item.id)}
                                                 sx={{
-                                                    color: theme.palette.error.main,
+                                                    color: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                     padding: '12px 8px',
                                                     cursor: 'pointer',
@@ -871,6 +859,15 @@ export default function Budget() {
                                                 }}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    {item.linkedLoanId && (
+                                                        <AccountBalanceIcon
+                                                            sx={{
+                                                                fontSize: '1rem',
+                                                                color: theme.palette.info.main,
+                                                                opacity: 0.8
+                                                            }}
+                                                        />
+                                                    )}
                                                     <span style={{ flex: 1 }}>
                                                         {item.name}
                                                     </span>
@@ -882,11 +879,11 @@ export default function Budget() {
                                                                 handleDeleteItem(item.id);
                                                             }}
                                                             sx={{
-                                                                color: theme.palette.error.main,
+                                                                color: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
                                                                 padding: '4px',
                                                                 '&:hover': {
-                                                                    bgcolor: theme.palette.error.main,
-                                                                    color: theme.palette.error.contrastText,
+                                                                    bgcolor: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
+                                                                    color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.error.contrastText,
                                                                 },
                                                             }}
                                                         >
@@ -1110,7 +1107,7 @@ export default function Budget() {
                                                         }}
                                                     />
                                                     <span style={{ flex: 1 }}>
-                                                        Loan: {item.loanTitle || item.name}
+                                                        {item.loanTitle || item.name}
                                                     </span>
                                                     {selectedItemForDelete === item.id && (
                                                         <IconButton

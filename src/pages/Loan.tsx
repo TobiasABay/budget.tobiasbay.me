@@ -229,7 +229,12 @@ export default function Loan() {
             }
         }
 
-        return payments;
+        // Sort by year descending (most recent first), then by loan name
+        return payments.sort((a, b) => {
+            const yearDiff = parseInt(b.year) - parseInt(a.year);
+            if (yearDiff !== 0) return yearDiff;
+            return a.loanName.localeCompare(b.loanName);
+        });
     };
 
     if (loading) {
