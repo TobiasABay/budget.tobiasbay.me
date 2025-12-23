@@ -14,7 +14,7 @@ interface BudgetItem {
   type: 'income' | 'expense';
   amount: number;
   frequency: string;
-  months: { [key: string]: number };
+  months: { [key: string]: number | { [key: string]: string } }; // Allow nested _formulas object
   formulas?: { [key: string]: string };
   isLoan?: boolean;
   loanTitle?: string;
@@ -260,6 +260,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           staticExpensePrice: item.staticExpensePrice || null,
         }) : null;
 
+        // Ensure months is a valid object (handle cases where it might be undefined)
+        const monthsData = item.months || {};
+        const monthsJson = JSON.stringify(monthsData);
+
         // Always try to insert with loan_data and static_expense_data (columns exist)
         try {
           await env.budget_db
@@ -272,7 +276,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               item.name,
               item.type,
               item.frequency,
-              JSON.stringify(item.months),
+              monthsJson,
               loanData,
               staticExpenseData
             )
@@ -292,7 +296,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                   item.name,
                   item.type,
                   item.frequency,
-                  JSON.stringify(item.months),
+                  monthsJson,
                   loanData
                 )
                 .run();
@@ -311,7 +315,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                     item.name,
                     item.type,
                     item.frequency,
-                    JSON.stringify(item.months)
+                    monthsJson
                   )
                   .run();
               } else {
@@ -331,7 +335,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
                 item.name,
                 item.type,
                 item.frequency,
-                JSON.stringify(item.months)
+                monthsJson
               )
               .run();
           } else {

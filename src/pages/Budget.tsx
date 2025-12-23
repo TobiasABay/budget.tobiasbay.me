@@ -205,11 +205,21 @@ export default function Budget() {
         setSaving(true);
         try {
             // Ensure items with static expense properties are marked as static expenses before saving
+            // Also merge formulas back into months._formulas for persistence
             const normalizedItems = lineItems.map((item: LineItem) => {
-                if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
-                    return { ...item, isStaticExpense: true };
+                const normalizedItem = { ...item };
+
+                // Merge formulas back into months._formulas if they exist
+                if (item.formulas && Object.keys(item.formulas).length > 0) {
+                    const monthsWithFormulas = { ...item.months };
+                    (monthsWithFormulas as any)._formulas = item.formulas;
+                    normalizedItem.months = monthsWithFormulas;
                 }
-                return item;
+
+                if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
+                    normalizedItem.isStaticExpense = true;
+                }
+                return normalizedItem;
             });
             const encodedYear = encodeURIComponent(year);
             const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
