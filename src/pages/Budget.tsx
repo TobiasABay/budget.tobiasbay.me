@@ -376,7 +376,45 @@ export default function Budget() {
             })
         };
 
-        const updatedItems = [...lineItems, newItem];
+        // Insert the new item in the correct position based on its type
+        let updatedItems: LineItem[];
+        if (itemType === 'income') {
+            // Insert income items at the end of all income items
+            const incomeItems = lineItems.filter(item => item.type === 'income');
+            const expenseItems = lineItems.filter(item => item.type === 'expense');
+            updatedItems = [...incomeItems, newItem, ...expenseItems];
+        } else {
+            // For expenses, insert based on the expense type
+            const incomeItems = lineItems.filter(item => item.type === 'income');
+            const regularExpenses = lineItems.filter(item =>
+                item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !item.linkedLoanId
+            );
+            const loanLinkedExpenses = lineItems.filter(item =>
+                item.type === 'expense' && !item.isLoan && !item.isStaticExpense && item.linkedLoanId
+            );
+            const staticExpenses = lineItems.filter(item =>
+                item.type === 'expense' && item.isStaticExpense
+            );
+            const loanItems = lineItems.filter(item =>
+                item.type === 'expense' && item.isLoan
+            );
+
+            // Insert new expense in the appropriate section
+            if (isStaticExpense) {
+                // Static expenses go before loans
+                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, ...staticExpenses, newItem, ...loanItems];
+            } else if (isLoan) {
+                // Loan items go at the end of expenses
+                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, ...staticExpenses, ...loanItems, newItem];
+            } else if (linkedLoanId) {
+                // Loan-linked expenses go after regular expenses
+                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, newItem, ...staticExpenses, ...loanItems];
+            } else {
+                // Regular expenses go first in the expense section
+                updatedItems = [...incomeItems, ...regularExpenses, newItem, ...loanLinkedExpenses, ...staticExpenses, ...loanItems];
+            }
+        }
+
         setLineItems(updatedItems);
         handleCloseModal();
     };
@@ -720,7 +758,7 @@ export default function Budget() {
                                             }}
                                         >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                {selectedItemForDelete === item.id && (
+                                                {selectedItemForDelete === item.id && item.type === 'income' && (
                                                     <DragIndicatorIcon
                                                         sx={{
                                                             color: theme.palette.text.secondary,
@@ -898,7 +936,7 @@ export default function Budget() {
                                                 }}
                                             >
                                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    {selectedItemForDelete === item.id && (
+                                                    {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
                                                         <DragIndicatorIcon
                                                             sx={{
                                                                 color: theme.palette.text.secondary,
