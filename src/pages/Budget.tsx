@@ -699,6 +699,11 @@ export default function Budget() {
                                         minWidth: isMobile ? '120px' : 'auto',
                                         padding: isMobile ? '8px 4px' : '12px 8px',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 3,
+                                        }),
                                     }}
                                 >
                                     Amount
@@ -752,6 +757,12 @@ export default function Budget() {
                                                 padding: isMobile ? '8px 4px' : '12px 8px',
                                                 cursor: 'pointer',
                                                 fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                bgcolor: theme.palette.background.paper,
+                                                ...(isMobile && {
+                                                    position: 'sticky',
+                                                    left: 0,
+                                                    zIndex: 2,
+                                                }),
                                                 '&:hover': {
                                                     bgcolor: 'transparent',
                                                 },
@@ -862,6 +873,11 @@ export default function Budget() {
                                         fontWeight: 'bold',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
                                         bgcolor: theme.palette.background.default,
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 2,
+                                        }),
                                     }}
                                 >
                                     Total Income
@@ -930,6 +946,12 @@ export default function Budget() {
                                                     padding: isMobile ? '8px 4px' : '12px 8px',
                                                     cursor: 'pointer',
                                                     fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                    bgcolor: theme.palette.background.paper,
+                                                    ...(isMobile && {
+                                                        position: 'sticky',
+                                                        left: 0,
+                                                        zIndex: 2,
+                                                    }),
                                                     '&:hover': {
                                                         bgcolor: 'transparent',
                                                     },
@@ -1055,6 +1077,11 @@ export default function Budget() {
                                                 padding: '12px 8px',
                                                 fontWeight: 'bold',
                                                 bgcolor: theme.palette.background.default,
+                                                ...(isMobile && {
+                                                    position: 'sticky',
+                                                    left: 0,
+                                                    zIndex: 2,
+                                                }),
                                             }}
                                         >
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1108,6 +1135,12 @@ export default function Budget() {
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                     padding: '12px 8px',
                                                     cursor: 'pointer',
+                                                    bgcolor: theme.palette.background.paper,
+                                                    ...(isMobile && {
+                                                        position: 'sticky',
+                                                        left: 0,
+                                                        zIndex: 2,
+                                                    }),
                                                     '&:hover': {
                                                         bgcolor: theme.palette.background.default,
                                                     },
@@ -1216,6 +1249,11 @@ export default function Budget() {
                                         fontWeight: 'bold',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
                                         bgcolor: theme.palette.background.default,
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 2,
+                                        }),
                                     }}
                                 >
                                     Total Expense
@@ -1265,6 +1303,11 @@ export default function Budget() {
                                         fontWeight: 'bold',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
                                         bgcolor: theme.palette.background.default,
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 2,
+                                        }),
                                     }}
                                 >
                                     Savings
@@ -1306,6 +1349,11 @@ export default function Budget() {
                                         fontWeight: 'bold',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
                                         bgcolor: theme.palette.background.default,
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 2,
+                                        }),
                                     }}
                                 >
                                     Cumulative Savings
