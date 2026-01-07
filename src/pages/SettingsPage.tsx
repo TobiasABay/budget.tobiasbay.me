@@ -10,6 +10,7 @@ import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import FolderIcon from '@mui/icons-material/Folder';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -163,13 +164,28 @@ export default function SettingsPage() {
   const [loansLoading, setLoansLoading] = useState<boolean>(true);
   const [loanDeleteDialogOpen, setLoanDeleteDialogOpen] = useState<boolean>(false);
   const [loanToDelete, setLoanToDelete] = useState<Loan | null>(null);
+  const [stocksYears, setStocksYears] = useState<string[]>([]);
+  const [stockYearDeleteDialogOpen, setStockYearDeleteDialogOpen] = useState<boolean>(false);
+  const [stockYearToDelete, setStockYearToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       loadBudgets();
       loadLoans();
+      loadStocksYears();
     }
   }, [isLoaded, user?.id]);
+
+  const loadStocksYears = () => {
+    const storedYears = localStorage.getItem('stocks_years');
+    if (storedYears) {
+      try {
+        setStocksYears(JSON.parse(storedYears));
+      } catch (e) {
+        console.error('Error loading stocks years:', e);
+      }
+    }
+  };
 
   const loadBudgets = async () => {
     if (!user?.id) return;
@@ -313,6 +329,40 @@ export default function SettingsPage() {
       setCurrency({ code: 'NONE', symbol: '', name: 'No Currency' });
       setStoredCurrency('NONE');
     }
+  };
+
+  const handleStockYearDeleteClick = (year: string) => {
+    setStockYearToDelete(year);
+    setStockYearDeleteDialogOpen(true);
+  };
+
+  const handleStockYearDeleteCancel = () => {
+    setStockYearDeleteDialogOpen(false);
+    setStockYearToDelete(null);
+  };
+
+  const handleStockYearDeleteConfirm = () => {
+    if (!stockYearToDelete) return;
+
+    // Remove year from localStorage
+    const updatedYears = stocksYears.filter(y => y !== stockYearToDelete);
+    setStocksYears(updatedYears);
+    localStorage.setItem('stocks_years', JSON.stringify(updatedYears));
+
+    // Remove all stocks for that year from localStorage
+    const storedStocks = localStorage.getItem('stocks_data');
+    if (storedStocks) {
+      try {
+        const stocks = JSON.parse(storedStocks);
+        const updatedStocks = stocks.filter((s: any) => s.year !== stockYearToDelete);
+        localStorage.setItem('stocks_data', JSON.stringify(updatedStocks));
+      } catch (e) {
+        console.error('Error deleting stocks data:', e);
+      }
+    }
+
+    setStockYearDeleteDialogOpen(false);
+    setStockYearToDelete(null);
   };
 
   return (
@@ -903,6 +953,200 @@ export default function SettingsPage() {
             </Button>
             <Button
               onClick={handleLoanDeleteConfirm}
+              variant="contained"
+              color="error"
+              sx={{
+                bgcolor: theme.palette.error.main,
+                color: theme.palette.error.contrastText,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '8px 20px',
+                '&:hover': {
+                  bgcolor: theme.palette.error.dark,
+                  transform: 'translateY(-1px)',
+                  boxShadow: `0 4px 12px ${theme.palette.error.main}40`,
+                },
+                transition: 'all 0.2s ease',
+              }}
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Stocks Years Section */}
+        <Paper
+          sx={{
+            bgcolor: theme.palette.background.paper,
+            padding: isMobile ? '1.5rem' : '2rem',
+            marginBottom: isMobile ? '1.5rem' : '2rem',
+            borderRadius: '12px',
+            boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: `0 4px 16px ${theme.palette.text.primary}15`,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <TrendingUpIcon sx={{ color: theme.palette.success.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Stocks Years
+            </Typography>
+            {stocksYears.length > 0 && (
+              <Chip
+                label={stocksYears.length}
+                size="small"
+                sx={{
+                  bgcolor: theme.palette.success.main,
+                  color: theme.palette.success.contrastText || theme.palette.text.primary,
+                  fontWeight: 600
+                }}
+              />
+            )}
+          </Box>
+          <List sx={{ padding: 0 }}>
+            {stocksYears.length === 0 ? (
+              <Box sx={{
+                padding: '2rem',
+                textAlign: 'center',
+                color: theme.palette.text.secondary
+              }}>
+                <TrendingUpIcon sx={{ fontSize: '3rem', opacity: 0.3, marginBottom: '1rem' }} />
+                <Typography>No stocks years created yet</Typography>
+                <Typography variant="body2" sx={{ marginTop: '0.5rem', opacity: 0.7 }}>
+                  Create years from the Stocks page
+                </Typography>
+              </Box>
+            ) : (
+              stocksYears.map((year, index) => (
+                <Box key={year}>
+                  <ListItem
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStockYearDeleteClick(year);
+                        }}
+                        sx={{
+                          color: theme.palette.error.main,
+                          '&:hover': {
+                            bgcolor: theme.palette.error.main,
+                            color: theme.palette.error.contrastText,
+                            transform: 'scale(1.1)',
+                          },
+                          transition: 'all 0.2s ease',
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    }
+                    sx={{
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      marginBottom: index < stocksYears.length - 1 ? '0.5rem' : 0,
+                      padding: '12px 16px',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        bgcolor: theme.palette.background.default,
+                        transform: 'translateX(4px)',
+                        boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+                      },
+                    }}
+                    onClick={() => navigate('/stocks')}
+                  >
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      flex: 1
+                    }}>
+                      <TrendingUpIcon sx={{
+                        fontSize: '1.25rem',
+                        color: theme.palette.success.main
+                      }} />
+                      <ListItemText
+                        primary={
+                          <Typography sx={{
+                            color: theme.palette.text.primary,
+                            fontWeight: 500,
+                            fontSize: '1rem'
+                          }}>
+                            Stocks {year}
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography sx={{
+                            color: theme.palette.text.secondary,
+                            fontSize: '0.85rem',
+                            marginTop: '2px'
+                          }}>
+                            Click to view
+                          </Typography>
+                        }
+                      />
+                    </Box>
+                  </ListItem>
+                  {index < stocksYears.length - 1 && (
+                    <Divider sx={{
+                      marginLeft: '56px',
+                      opacity: 0.3
+                    }} />
+                  )}
+                </Box>
+              ))
+            )}
+          </List>
+        </Paper>
+
+        {/* Stock Year Delete Confirmation Dialog */}
+        <Dialog
+          open={stockYearDeleteDialogOpen}
+          onClose={handleStockYearDeleteCancel}
+          PaperProps={{
+            sx: {
+              bgcolor: theme.palette.background.paper,
+              color: theme.palette.text.primary,
+              borderRadius: '12px',
+              minWidth: isMobile ? 'auto' : '400px',
+            }
+          }}
+        >
+          <DialogTitle sx={{
+            color: theme.palette.text.primary,
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5
+          }}>
+            <DeleteIcon sx={{ color: theme.palette.error.main }} />
+            Delete Stocks Year
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText sx={{ color: theme.palette.text.secondary }}>
+              Are you sure you want to delete Stocks {stockYearToDelete}? This action cannot be undone and will delete all stocks and data for this year.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions sx={{ padding: '1.5rem', gap: 1 }}>
+            <Button
+              onClick={handleStockYearDeleteCancel}
+              sx={{
+                color: theme.palette.text.secondary,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                padding: '8px 20px',
+                '&:hover': {
+                  bgcolor: theme.palette.background.default,
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleStockYearDeleteConfirm}
               variant="contained"
               color="error"
               sx={{

@@ -14,6 +14,7 @@ import { UserButton, useUser } from '@clerk/clerk-react';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 
 // Use production API URL so local and production frontends use the same backend and database
@@ -52,7 +53,7 @@ export default function Navbar() {
     { text: 'Loans', icon: <PaymentsIcon />, path: '/loans' },
     { text: 'Salary', icon: <RequestQuoteIcon />, path: '/salary' },
     { text: 'Insurance', icon: <AssignmentIndIcon />, path: '/insurance' },
-
+    { text: 'Stocks', icon: <TrendingUpIcon />, path: '/stocks' },
   ];
 
   useEffect(() => {

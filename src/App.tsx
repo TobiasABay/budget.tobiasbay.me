@@ -9,6 +9,7 @@ import SignUpPage from './pages/SignUpPage';
 import Budget from './pages/Budget';
 import Loan from './pages/Loan';
 import SettingsPage from './pages/SettingsPage';
+import Stocks from './pages/Stocks';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -40,6 +41,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Loan />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stocks"
+            element={
+              <ProtectedRoute>
+                <Stocks />
               </ProtectedRoute>
             }
           />
