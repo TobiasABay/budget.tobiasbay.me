@@ -712,9 +712,17 @@ export default function Budget() {
             }))
             .sort((a, b) => b.amount - a.amount); // Sort by amount descending (highest percentage first)
 
-        // Limit to top 10 when "all" is selected
-        if (selectedMonth === 'all') {
-            funExpensesByItem = funExpensesByItem.slice(0, 10);
+        // Limit to top 10 when "all" is selected, and add "Other" for remaining items
+        if (selectedMonth === 'all' && funExpensesByItem.length > 10) {
+            const top10 = funExpensesByItem.slice(0, 10);
+            const remainingItems = funExpensesByItem.slice(10);
+            const otherAmount = remainingItems.reduce((sum, item) => sum + item.amount, 0);
+
+            if (otherAmount > 0) {
+                funExpensesByItem = [...top10, { name: 'Other', amount: otherAmount }];
+            } else {
+                funExpensesByItem = top10;
+            }
         }
 
         // Calculate expenses by category
