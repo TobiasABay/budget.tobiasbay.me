@@ -39,6 +39,51 @@ PRAGMA table_info(budget_items);
 
 You should see `loan_data` in the list of columns.
 
+## Add Category Column
+
+To enable expense categorization, you need to add the `category` column to your `budget_items` table.
+
+### For Cloudflare D1 (Production)
+
+1. Go to Cloudflare Dashboard → D1 Database
+2. Select your database (budget-db)
+3. Go to the "Execute SQL" tab
+4. Run the following SQL:
+
+```sql
+ALTER TABLE budget_items ADD COLUMN category TEXT;
+```
+
+### For Local Development (Wrangler)
+
+Run this command:
+
+```bash
+wrangler d1 execute budget-db --local --command "ALTER TABLE budget_items ADD COLUMN category TEXT;"
+```
+
+### For Remote/Production Database
+
+```bash
+wrangler d1 execute budget-db --remote --command "ALTER TABLE budget_items ADD COLUMN category TEXT;"
+```
+
+Or use the migration file:
+
+```bash
+wrangler d1 execute budget-db --remote --file=./migrations/add_category_column.sql
+```
+
+### Verify Migration
+
+After running the migration, you can verify it worked by running:
+
+```sql
+PRAGMA table_info(budget_items);
+```
+
+You should see `category` in the list of columns.
+
 ## Important Notes
 
 - **Backup your database** before running migrations in production
