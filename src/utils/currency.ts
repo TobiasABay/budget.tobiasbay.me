@@ -87,3 +87,4 @@ export function formatCurrency(amount: number, currency: Currency): string {
   return `${currency.symbol}${amount.toFixed(2)}`;
 }
 
+

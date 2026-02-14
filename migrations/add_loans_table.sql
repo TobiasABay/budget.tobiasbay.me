@@ -19,3 +19,4 @@ CREATE INDEX IF NOT EXISTS idx_loans_user_id ON loans(user_id);
 -- Note: SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN
 -- This needs to be run manually or handled in application code
 -- ALTER TABLE budget_items ADD COLUMN linked_loan_id TEXT;
+

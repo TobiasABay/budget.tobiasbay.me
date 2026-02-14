@@ -6,3 +6,4 @@
 -- This needs to be run manually or handled in application code
 ALTER TABLE budget_items ADD COLUMN category TEXT;
 
+
