@@ -290,15 +290,23 @@ export default function Budget() {
                     }
                     return normalizedItem;
                 });
-                
+
                 // Debug: Log items with categories after loading
                 const itemsWithCategories = normalizedItems.filter((item: LineItem) => item.type === 'expense');
                 console.log('🔍 Debug: Loaded items with categories:', itemsWithCategories.map((item: LineItem) => ({
+                    id: item.id,
                     name: item.name,
                     category: item.category,
-                    hasCategory: 'category' in item
+                    categoryType: typeof item.category,
+                    hasCategory: 'category' in item,
+                    categoryValue: item.category
                 })));
-                
+
+                // Check if any expense has a category
+                const expensesWithCategories = itemsWithCategories.filter((item: LineItem) => item.category);
+                console.log('🔍 Debug: Loaded expenses WITH categories:', expensesWithCategories.length);
+                console.log('🔍 Debug: Loaded expenses WITHOUT categories:', itemsWithCategories.length - expensesWithCategories.length);
+
                 setLineItems(normalizedItems);
             }
         } catch (error) {
@@ -330,34 +338,51 @@ export default function Budget() {
                     normalizedItem.isStaticExpense = true;
                 }
 
-            // Explicitly include category field (use null instead of undefined so it's serialized)
-            if (item.type === 'expense') {
-                // Normalize category: empty string becomes null, undefined becomes null
-                normalizedItem.category = (item.category && item.category.trim()) || null;
-            }
+                // Explicitly include category field (use null instead of undefined so it's serialized)
+                if (item.type === 'expense') {
+                    // Normalize category: empty string becomes null, undefined becomes null
+                    normalizedItem.category = (item.category && item.category.trim()) || null;
+                }
 
                 return normalizedItem;
             });
-        
-        // Debug: Log items with categories to see what we're sending
-        const itemsWithCategories = normalizedItems.filter(item => item.type === 'expense');
-        console.log('🔍 Debug: Saving items with categories:', itemsWithCategories.map(item => ({
-            name: item.name,
-            category: item.category,
-            hasCategory: 'category' in item
-        })));
-        
+
+            // Debug: Log items with categories to see what we're sending
+            const itemsWithCategories = normalizedItems.filter((item: LineItem) => item.type === 'expense');
+            console.log('🔍 Debug: Saving items with categories:', itemsWithCategories.map((item: LineItem) => ({
+                id: item.id,
+                name: item.name,
+                category: item.category,
+                categoryType: typeof item.category,
+                hasCategory: 'category' in item,
+                categoryValue: item.category
+            })));
+
+            // Check if any expense has a category
+            const expensesWithCategories = itemsWithCategories.filter((item: LineItem) => item.category);
+            console.log('🔍 Debug: Expenses WITH categories:', expensesWithCategories.length);
+            console.log('🔍 Debug: Expenses WITHOUT categories:', itemsWithCategories.length - expensesWithCategories.length);
+
             const encodedYear = encodeURIComponent(year);
-        const requestBody = JSON.stringify({ items: normalizedItems });
-        console.log('🔍 Debug: Request body (first 500 chars):', requestBody.substring(0, 500));
-        
+            const requestBody = JSON.stringify({ items: normalizedItems });
+
+            // Check if category field exists in JSON string
+            const hasCategoryInJson = requestBody.includes('"category"');
+            console.log('🔍 Debug: Does JSON contain "category" field?', hasCategoryInJson);
+
+            // Find a sample expense in the JSON to check
+            const sampleExpenseMatch = requestBody.match(/"name":"([^"]+)","type":"expense"[^}]*}/);
+            if (sampleExpenseMatch) {
+                console.log('🔍 Debug: Sample expense JSON:', sampleExpenseMatch[0]);
+            }
+
             const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-User-Id': user.id,
                 },
-            body: requestBody,
+                body: requestBody,
             });
 
             if (!response.ok) {
@@ -1217,23 +1242,23 @@ export default function Budget() {
                                                             >
                                                                 <EditIcon fontSize="small" />
                                                             </IconButton>
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteItem(item.id);
-                                                            }}
-                                                            sx={{
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item.id);
+                                                                }}
+                                                                sx={{
                                                                     color: item.linkedLoanId ? theme.palette.info.main : '#f44336',
-                                                                padding: '4px',
-                                                                '&:hover': {
+                                                                    padding: '4px',
+                                                                    '&:hover': {
                                                                         bgcolor: item.linkedLoanId ? theme.palette.info.main : '#f44336',
                                                                         color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.primary.contrastText,
-                                                                },
-                                                            }}
-                                                        >
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
                                                         </>
                                                     )}
                                                 </Box>
@@ -1302,7 +1327,7 @@ export default function Budget() {
                             {lineItems
                                 .filter(item => isNordnetItem(item))
                                 .map((item) => {
-                                return (
+                                    return (
                                         <TableRow
                                             key={item.id}
                                             draggable
@@ -1320,26 +1345,26 @@ export default function Budget() {
                                                 },
                                             }}
                                         >
-                                        <TableCell
+                                            <TableCell
                                                 onClick={() => handleNameCellClick(item.id)}
-                                            sx={{
+                                                sx={{
                                                     color: '#9c27b0', // Purple color for Nordnet/stock savings
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                     padding: isMobile ? '8px 4px' : '12px 8px',
                                                     cursor: 'pointer',
                                                     fontSize: isMobile ? '0.75rem' : '0.875rem',
                                                     bgcolor: theme.palette.background.paper,
-                                                ...(isMobile && {
-                                                    position: 'sticky',
-                                                    left: 0,
-                                                    zIndex: 2,
-                                                }),
+                                                    ...(isMobile && {
+                                                        position: 'sticky',
+                                                        left: 0,
+                                                        zIndex: 2,
+                                                    }),
                                                     '&:hover': {
                                                         bgcolor: 'transparent',
                                                     },
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                     {selectedItemForDelete === item.id && (
                                                         <DragIndicatorIcon
                                                             sx={{
@@ -1353,8 +1378,8 @@ export default function Budget() {
                                                         />
                                                     )}
                                                     <TrendingUpIcon
-                                                    sx={{
-                                                        fontSize: '1rem',
+                                                        sx={{
+                                                            fontSize: '1rem',
                                                             color: '#9c27b0',
                                                             opacity: 0.9
                                                         }}
@@ -1381,17 +1406,17 @@ export default function Budget() {
                                                             <DeleteIcon />
                                                         </IconButton>
                                                     )}
-                                            </Box>
-                                        </TableCell>
-                                        {MONTHS.map((month) => {
+                                                </Box>
+                                            </TableCell>
+                                            {MONTHS.map((month) => {
                                                 const cellValue = item.months[month] || 0;
                                                 const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                            return (
-                                                <TableCell
-                                                    key={month}
+                                                return (
+                                                    <TableCell
+                                                        key={month}
                                                         onClick={() => !isEditing && handleCellClick(item.id, month)}
-                                                    align="center"
-                                                    sx={{
+                                                        align="center"
+                                                        sx={{
                                                             color: '#9c27b0',
                                                             padding: '8px 4px',
                                                             cursor: isEditing ? 'default' : 'pointer',
@@ -1442,11 +1467,11 @@ export default function Budget() {
                                                         ) : (
                                                             cellValue === 0 ? '-' : formatCurrency(cellValue, currency)
                                                         )}
-                                                </TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                );
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
+                                    );
                                 })}
                             {/* Loan Items */}
                             {lineItems
@@ -1906,9 +1931,9 @@ export default function Budget() {
                                     return (a.name || '').localeCompare(b.name || '');
                                 }
                                 // For months with dates, sort by date
-                                    const dateA = a.staticExpenseDate || '';
-                                    const dateB = b.staticExpenseDate || '';
-                                    return dateA.localeCompare(dateB);
+                                const dateA = a.staticExpenseDate || '';
+                                const dateB = b.staticExpenseDate || '';
+                                return dateA.localeCompare(dateB);
                             });
                         });
 
@@ -1950,182 +1975,182 @@ export default function Budget() {
                                             <AccordionDetails sx={{ padding: '1rem', paddingTop: '0.5rem' }}>
                                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                                     {monthExpenses.map((item) => {
-                                    const isEditing = editingStaticExpense === item.id;
-                                    return (
-                                        <Paper
-                                            key={item.id}
-                                            sx={{
+                                                        const isEditing = editingStaticExpense === item.id;
+                                                        return (
+                                                            <Paper
+                                                                key={item.id}
+                                                                sx={{
                                                                     bgcolor: theme.palette.background.paper,
-                                                padding: '1rem',
+                                                                    padding: '1rem',
                                                                     paddingRight: '0.5rem',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 2,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 2,
                                                                     overflow: 'visible',
                                                                     minWidth: 0,
-                                                '&:hover': {
+                                                                    '&:hover': {
                                                                         bgcolor: theme.palette.background.default,
-                                                },
-                                            }}
-                                        >
-                                            {isEditing ? (
-                                                <>
-                                                    <TextField
-                                                        label="Name"
-                                                        value={editStaticExpenseName}
-                                                        onChange={(e) => setEditStaticExpenseName(e.target.value)}
-                                                        size="small"
-                                                        sx={{
-                                                            flex: 1,
-                                                            '& .MuiOutlinedInput-root': {
-                                                                color: theme.palette.text.primary,
-                                                                '& fieldset': {
-                                                                    borderColor: theme.palette.secondary.main,
-                                                                },
-                                                            },
-                                                        }}
-                                                    />
-                                                    <TextField
-                                                        label="Date"
-                                                        type="date"
-                                                        value={editStaticExpenseDate}
-                                                        onChange={(e) => setEditStaticExpenseDate(e.target.value)}
-                                                        size="small"
-                                                        InputLabelProps={{ shrink: true }}
-                                                        sx={{
-                                                            '& .MuiOutlinedInput-root': {
-                                                                color: theme.palette.text.primary,
-                                                                '& fieldset': {
-                                                                    borderColor: theme.palette.secondary.main,
-                                                                },
-                                                            },
-                                                        }}
-                                                    />
-                                                    <TextField
-                                                        label="Price"
-                                                        type="number"
-                                                        value={editStaticExpensePrice}
-                                                        onChange={(e) => setEditStaticExpensePrice(e.target.value)}
-                                                        size="small"
-                                                        sx={{
-                                                            width: '120px',
-                                                            '& .MuiOutlinedInput-root': {
-                                                                color: theme.palette.text.primary,
-                                                                '& fieldset': {
-                                                                    borderColor: theme.palette.secondary.main,
-                                                                },
-                                                            },
-                                                        }}
-                                                    />
-                                                    <Button
-                                                        onClick={() => {
-                                                            if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
+                                                                    },
+                                                                }}
+                                                            >
+                                                                {isEditing ? (
+                                                                    <>
+                                                                        <TextField
+                                                                            label="Name"
+                                                                            value={editStaticExpenseName}
+                                                                            onChange={(e) => setEditStaticExpenseName(e.target.value)}
+                                                                            size="small"
+                                                                            sx={{
+                                                                                flex: 1,
+                                                                                '& .MuiOutlinedInput-root': {
+                                                                                    color: theme.palette.text.primary,
+                                                                                    '& fieldset': {
+                                                                                        borderColor: theme.palette.secondary.main,
+                                                                                    },
+                                                                                },
+                                                                            }}
+                                                                        />
+                                                                        <TextField
+                                                                            label="Date"
+                                                                            type="date"
+                                                                            value={editStaticExpenseDate}
+                                                                            onChange={(e) => setEditStaticExpenseDate(e.target.value)}
+                                                                            size="small"
+                                                                            InputLabelProps={{ shrink: true }}
+                                                                            sx={{
+                                                                                '& .MuiOutlinedInput-root': {
+                                                                                    color: theme.palette.text.primary,
+                                                                                    '& fieldset': {
+                                                                                        borderColor: theme.palette.secondary.main,
+                                                                                    },
+                                                                                },
+                                                                            }}
+                                                                        />
+                                                                        <TextField
+                                                                            label="Price"
+                                                                            type="number"
+                                                                            value={editStaticExpensePrice}
+                                                                            onChange={(e) => setEditStaticExpensePrice(e.target.value)}
+                                                                            size="small"
+                                                                            sx={{
+                                                                                width: '120px',
+                                                                                '& .MuiOutlinedInput-root': {
+                                                                                    color: theme.palette.text.primary,
+                                                                                    '& fieldset': {
+                                                                                        borderColor: theme.palette.secondary.main,
+                                                                                    },
+                                                                                },
+                                                                            }}
+                                                                        />
+                                                                        <Button
+                                                                            onClick={() => {
+                                                                                if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
 
                                                                                 const price = parseFloat(editStaticExpensePrice) || 0;
                                                                                 let monthName = '';
 
                                                                                 // Validate and parse date
                                                                                 try {
-                                                            const date = new Date(editStaticExpenseDate);
+                                                                                    const date = new Date(editStaticExpenseDate);
                                                                                     if (!isNaN(date.getTime())) {
-                                                            const monthIndex = date.getMonth();
+                                                                                        const monthIndex = date.getMonth();
                                                                                         monthName = MONTHS[monthIndex];
                                                                                     }
                                                                                 } catch (e) {
                                                                                     // Invalid date, will be handled as uncategorized
                                                                                 }
 
-                                                            const updatedItems = lineItems.map(li => {
-                                                                if (li.id === item.id) {
-                                                                    const newMonths: { [key: string]: number } = {};
+                                                                                const updatedItems = lineItems.map(li => {
+                                                                                    if (li.id === item.id) {
+                                                                                        const newMonths: { [key: string]: number } = {};
                                                                                         if (monthName) {
-                                                                    newMonths[monthName] = price;
+                                                                                            newMonths[monthName] = price;
                                                                                         }
-                                                                    return {
-                                                                        ...li,
-                                                                        name: editStaticExpenseName.trim(),
-                                                                        staticExpenseDate: editStaticExpenseDate,
-                                                                        staticExpensePrice: price,
-                                                                        months: newMonths,
-                                                                        isStaticExpense: true, // Explicitly preserve the flag
-                                                                    };
-                                                                }
-                                                                return li;
-                                                            });
-                                                            setLineItems(updatedItems);
-                                                            setEditingStaticExpense(null);
-                                                            setEditStaticExpenseName('');
-                                                            setEditStaticExpenseDate('');
-                                                            setEditStaticExpensePrice('');
-                                                        }}
-                                                        variant="contained"
-                                                        size="small"
-                                                        sx={{
-                                                            bgcolor: theme.palette.primary.main,
-                                                            color: theme.palette.primary.contrastText,
-                                                        }}
-                                                    >
-                                                        Save
-                                                    </Button>
-                                                    <Button
-                                                        onClick={() => {
-                                                            setEditingStaticExpense(null);
-                                                            setEditStaticExpenseName('');
-                                                            setEditStaticExpenseDate('');
-                                                            setEditStaticExpensePrice('');
-                                                        }}
-                                                        size="small"
-                                                        sx={{
-                                                            color: theme.palette.text.secondary,
-                                                        }}
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                </>
-                                            ) : (
-                                                <>
+                                                                                        return {
+                                                                                            ...li,
+                                                                                            name: editStaticExpenseName.trim(),
+                                                                                            staticExpenseDate: editStaticExpenseDate,
+                                                                                            staticExpensePrice: price,
+                                                                                            months: newMonths,
+                                                                                            isStaticExpense: true, // Explicitly preserve the flag
+                                                                                        };
+                                                                                    }
+                                                                                    return li;
+                                                                                });
+                                                                                setLineItems(updatedItems);
+                                                                                setEditingStaticExpense(null);
+                                                                                setEditStaticExpenseName('');
+                                                                                setEditStaticExpenseDate('');
+                                                                                setEditStaticExpensePrice('');
+                                                                            }}
+                                                                            variant="contained"
+                                                                            size="small"
+                                                                            sx={{
+                                                                                bgcolor: theme.palette.primary.main,
+                                                                                color: theme.palette.primary.contrastText,
+                                                                            }}
+                                                                        >
+                                                                            Save
+                                                                        </Button>
+                                                                        <Button
+                                                                            onClick={() => {
+                                                                                setEditingStaticExpense(null);
+                                                                                setEditStaticExpenseName('');
+                                                                                setEditStaticExpenseDate('');
+                                                                                setEditStaticExpensePrice('');
+                                                                            }}
+                                                                            size="small"
+                                                                            sx={{
+                                                                                color: theme.palette.text.secondary,
+                                                                            }}
+                                                                        >
+                                                                            Cancel
+                                                                        </Button>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
                                                                         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0, overflow: 'hidden' }}>
                                                                             <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {item.name}
-                                                        </Typography>
-                                                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                            {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
-                                                        </Typography>
-                                                    </Box>
-                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right', flexShrink: 0 }}>
-                                                        {formatCurrency(item.staticExpensePrice || 0, currency)}
-                                                    </Typography>
-                                                                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                                                    <IconButton
-                                                        onClick={() => {
-                                                            setEditingStaticExpense(item.id);
-                                                            setEditStaticExpenseName(item.name);
-                                                            setEditStaticExpenseDate(item.staticExpenseDate || '');
-                                                            setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
-                                                        }}
-                                                        size="small"
-                                                        sx={{
-                                                            color: theme.palette.primary.main,
-                                                        }}
-                                                    >
-                                                        <EditIcon />
-                                                    </IconButton>
-                                                    <IconButton
-                                                        onClick={() => handleDeleteItem(item.id)}
-                                                        size="small"
-                                                        sx={{
-                                                            color: theme.palette.error.main,
-                                                        }}
-                                                    >
-                                                        <DeleteIcon />
-                                                    </IconButton>
+                                                                                {item.name}
+                                                                            </Typography>
+                                                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                                                {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
+                                                                            </Typography>
                                                                         </Box>
-                                                </>
-                                            )}
-                                        </Paper>
-                                    );
-                                })}
-                        </Box>
+                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right', flexShrink: 0 }}>
+                                                                            {formatCurrency(item.staticExpensePrice || 0, currency)}
+                                                                        </Typography>
+                                                                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                                                                            <IconButton
+                                                                                onClick={() => {
+                                                                                    setEditingStaticExpense(item.id);
+                                                                                    setEditStaticExpenseName(item.name);
+                                                                                    setEditStaticExpenseDate(item.staticExpenseDate || '');
+                                                                                    setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
+                                                                                }}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    color: theme.palette.primary.main,
+                                                                                }}
+                                                                            >
+                                                                                <EditIcon />
+                                                                            </IconButton>
+                                                                            <IconButton
+                                                                                onClick={() => handleDeleteItem(item.id)}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    color: theme.palette.error.main,
+                                                                                }}
+                                                                            >
+                                                                                <DeleteIcon />
+                                                                            </IconButton>
+                                                                        </Box>
+                                                                    </>
+                                                                )}
+                                                            </Paper>
+                                                        );
+                                                    })}
+                                                </Box>
                                             </AccordionDetails>
                                         </Accordion>
                                     );
@@ -2604,9 +2629,9 @@ export default function Budget() {
                                                             }}>
                                                                 Savings: {formatCurrency(data.savings, currency)}
                                                             </span>
-            </Box>
-        </Box>
-    );
+                                                        </Box>
+                                                    </Box>
+                                                );
                                             })}
                                         </Box>
                                     </Paper>

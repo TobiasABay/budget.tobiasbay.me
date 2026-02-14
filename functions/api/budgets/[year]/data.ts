@@ -131,11 +131,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     if (request.method === 'GET') {
-      // Always try to select loan_data, static_expense_data, and linked_loan_id (columns may exist)
+      // Always try to select loan_data, static_expense_data, linked_loan_id, and category (columns may exist)
       let result;
       try {
         result = await env.budget_db
-          .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id FROM budget_items WHERE user_id = ? AND year = ?')
+          .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category FROM budget_items WHERE user_id = ? AND year = ?')
           .bind(userId, year)
           .all();
       } catch (e: any) {
@@ -252,6 +252,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           item.linkedLoanId = row.linked_loan_id as string;
         }
 
+        // Get category if it exists
+        const hasCategoryColumn = 'category' in row;
+        if (hasCategoryColumn && row.category !== null && row.category !== undefined && row.category !== '') {
+          item.category = row.category as string;
+        } else if (hasCategoryColumn && row.category === null) {
+          // Explicitly set to null if column exists but value is null
+          item.category = null;
+        }
+
         return item;
       });
 
@@ -272,6 +281,15 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
       // Debug: Log all items to see what we're receiving
       console.log('Received items to save:', JSON.stringify(body.items, null, 2));
+      
+      // Debug: Check categories specifically
+      const expenseItems = body.items.filter((item: BudgetItem) => item.type === 'expense');
+      console.log('🔍 Backend Debug: Expense items with categories:', expenseItems.map((item: BudgetItem) => ({
+        name: item.name,
+        category: item.category,
+        hasCategory: 'category' in item,
+        categoryType: typeof item.category
+      })));
 
       // Delete existing items
       await env.budget_db
