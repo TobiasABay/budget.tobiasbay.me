@@ -36,7 +36,7 @@ interface LoanPayment {
     loanName: string;
     totalPayment: number;
     remaining: number;
-    months: string[]; // Months where payments were registered
+    createdAt?: string;
 }
 
 export default function Loan() {
@@ -211,16 +211,11 @@ export default function Loan() {
                 const items = budgetData[year] || [];
                 const linkedItems = items.filter(item => item.linkedLoanId === loan.id && item.type === 'expense');
 
-                // Calculate total payment for this year and track which months have payments
+                // Calculate total payment for this year
                 let totalPayment = 0;
-                const monthsWithPayments = new Set<string>();
                 for (const item of linkedItems) {
                     for (const month in item.months) {
-                        const monthValue = item.months[month] || 0;
-                        if (monthValue > 0) {
-                            totalPayment += monthValue;
-                            monthsWithPayments.add(month);
-                        }
+                        totalPayment += item.months[month] || 0;
                     }
                 }
 
@@ -232,7 +227,7 @@ export default function Loan() {
                         loanName: loan.name,
                         totalPayment,
                         remaining,
-                        months: Array.from(monthsWithPayments).sort(),
+                        createdAt: loan.createdAt,
                     });
                 }
             }
@@ -386,7 +381,7 @@ export default function Loan() {
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
                                     }}
                                 >
-                                    Registered
+                                    Created
                                 </TableCell>
                                 <TableCell
                                     sx={{
@@ -445,11 +440,11 @@ export default function Loan() {
                                             padding: isMobile ? '8px 4px' : '12px 8px',
                                             fontSize: isMobile ? '0.7rem' : '0.875rem',
                                         }}>
-                                            {payment.months.length > 0 
-                                                ? `${payment.months.join(', ')} ${payment.year}`
-                                                : payment.totalPayment === 0 
-                                                    ? `${payment.year}` 
-                                                    : '-'}
+                                            {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: isMobile ? 'numeric' : 'short',
+                                                day: 'numeric'
+                                            }) : '-'}
                                         </TableCell>
                                         <TableCell sx={{ padding: isMobile ? '4px 2px' : '4px' }}>
                                             {index === 0 || loanPayments[index - 1].loanId !== payment.loanId ? (
