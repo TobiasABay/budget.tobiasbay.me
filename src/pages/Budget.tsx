@@ -56,7 +56,7 @@ interface LineItem {
     isStaticExpense?: boolean;
     staticExpenseDate?: string; // Format: "YYYY-MM-DD"
     staticExpensePrice?: number;
-    category?: string; // Expense category
+    category?: string | null; // Expense category
 }
 
 interface Loan {
@@ -135,7 +135,7 @@ export default function Budget() {
                 return {
                     ...item,
                     name: editExpenseName.trim(),
-                    category: editExpenseCategory || undefined
+                    category: editExpenseCategory.trim() || null
                 };
             }
             return item;
@@ -311,9 +311,9 @@ export default function Budget() {
         try {
             // Ensure items with static expense properties are marked as static expenses before saving
             // Also merge formulas back into months._formulas for persistence
-            // Category field is automatically included via spread operator
+            // Explicitly include category field to ensure it's saved
             const normalizedItems = lineItems.map((item: LineItem) => {
-                const normalizedItem = { ...item }; // Includes all fields: name, type, months, category, etc.
+                const normalizedItem: any = { ...item }; // Includes all fields: name, type, months, category, etc.
 
                 // Merge formulas back into months._formulas if they exist
                 if (item.formulas && Object.keys(item.formulas).length > 0) {
@@ -326,7 +326,11 @@ export default function Budget() {
                     normalizedItem.isStaticExpense = true;
                 }
 
-                // Category field is automatically preserved via spread operator above
+                // Explicitly include category field (use null instead of undefined so it's serialized)
+                if (item.type === 'expense') {
+                    normalizedItem.category = item.category || null;
+                }
+
                 return normalizedItem;
             });
             const encodedYear = encodeURIComponent(year);
@@ -441,8 +445,8 @@ export default function Budget() {
                 staticExpenseDate: staticExpenseDate,
                 staticExpensePrice: parseFloat(staticExpensePrice) || 0
             }),
-            ...(itemType === 'expense' && expenseCategory && {
-                category: expenseCategory
+            ...(itemType === 'expense' && {
+                category: expenseCategory.trim() || null
             })
         };
 
