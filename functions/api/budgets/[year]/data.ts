@@ -138,10 +138,22 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category FROM budget_items WHERE user_id = ? AND year = ?')
           .bind(userId, year)
           .all();
+        console.log('🔍 Backend Debug: Successfully selected with category column, got', result.results.length, 'items');
       } catch (e: any) {
         // If columns don't exist, try with fewer columns
         const errorMsg = e?.message || String(e);
-        if (errorMsg.includes('no such column: linked_loan_id')) {
+        console.log('🔍 Backend Debug: SELECT query error:', errorMsg);
+        usedFallback = true;
+        if (errorMsg.includes('no such column: category')) {
+          console.log('🔍 Backend Debug: Category column not found, trying without it');
+          try {
+            result = await env.budget_db
+              .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id FROM budget_items WHERE user_id = ? AND year = ?')
+              .bind(userId, year)
+              .all();
+          } catch (e2: any) {
+            const errorMsg2 = e2?.message || String(e2);
+            if (errorMsg2.includes('no such column: linked_loan_id')) {
           try {
             result = await env.budget_db
               .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
@@ -254,15 +266,32 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
         // Get category if it exists
         const hasCategoryColumn = 'category' in row;
-        if (hasCategoryColumn && row.category !== null && row.category !== undefined && row.category !== '') {
-          item.category = row.category as string;
-        } else if (hasCategoryColumn && row.category === null) {
-          // Explicitly set to null if column exists but value is null
-          item.category = null;
+        if (hasCategoryColumn) {
+          if (row.category !== null && row.category !== undefined && row.category !== '') {
+            item.category = row.category as string;
+          } else {
+            // Explicitly set to null if column exists but value is null
+            item.category = null;
+          }
+        } else {
+          // Category column not in result (fallback query was used)
+          console.log('🔍 Backend Debug: Category column not in row for item:', item.name);
         }
 
         return item;
       });
+
+      // Debug: Log items with categories
+      const expenseItems = items.filter(item => item.type === 'expense');
+      const itemsWithCategories = expenseItems.filter(item => item.category);
+      console.log('🔍 Backend Debug: Returning', itemsWithCategories.length, 'expenses with categories out of', expenseItems.length, 'total expenses');
+      if (expenseItems.length > 0) {
+        console.log('🔍 Backend Debug: Sample expense:', {
+          name: expenseItems[0].name,
+          hasCategory: 'category' in expenseItems[0],
+          category: expenseItems[0].category
+        });
+      }
 
       return new Response(JSON.stringify(items), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -318,10 +347,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         const monthsData = item.months || {};
         const monthsJson = JSON.stringify(monthsData);
 
-        // Always try to insert with loan_data, static_expense_data, and linked_loan_id (columns may exist)
+        // Always try to insert with loan_data, static_expense_data, linked_loan_id, and category (columns may exist)
         try {
           await env.budget_db
-            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
             .bind(
               budgetId,
               userId,
@@ -333,7 +362,8 @@ export const onRequest: PagesFunction<Env> = async (context) => {
               monthsJson,
               loanData,
               staticExpenseData,
-              item.linkedLoanId || null
+              item.linkedLoanId || null,
+              item.category || null
             )
             .run();
         } catch (e: any) {

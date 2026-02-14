@@ -271,6 +271,16 @@ export default function Budget() {
 
             if (response.ok) {
                 const items = await response.json();
+
+                // Debug: Check raw API response
+                const expenseItemsFromAPI = items.filter((item: any) => item.type === 'expense');
+                console.log('🔍 Debug: Raw API response - expense items:', expenseItemsFromAPI.slice(0, 3).map((item: any) => ({
+                    name: item.name,
+                    category: item.category,
+                    hasCategory: 'category' in item,
+                    allKeys: Object.keys(item)
+                })));
+
                 // Ensure items with static expense properties are marked as static expenses
                 // This is a safeguard in case the API didn't set the flag
                 // Also extract formulas from months._formulas if they exist
@@ -370,10 +380,19 @@ export default function Budget() {
             const hasCategoryInJson = requestBody.includes('"category"');
             console.log('🔍 Debug: Does JSON contain "category" field?', hasCategoryInJson);
 
-            // Find a sample expense in the JSON to check
-            const sampleExpenseMatch = requestBody.match(/"name":"([^"]+)","type":"expense"[^}]*}/);
-            if (sampleExpenseMatch) {
-                console.log('🔍 Debug: Sample expense JSON:', sampleExpenseMatch[0]);
+            // Find expenses with categories in the JSON to check
+            const expensesWithCategoryInJson = normalizedItems.filter((item: LineItem) =>
+                item.type === 'expense' && item.category
+            );
+            if (expensesWithCategoryInJson.length > 0) {
+                console.log('🔍 Debug: Expenses WITH categories being sent:', expensesWithCategoryInJson.map((item: LineItem) => ({
+                    name: item.name,
+                    category: item.category
+                })));
+                // Show full JSON for one expense with category
+                const sampleItem = expensesWithCategoryInJson[0];
+                const sampleJson = JSON.stringify(sampleItem);
+                console.log('🔍 Debug: Full JSON for expense with category:', sampleJson);
             }
 
             const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
