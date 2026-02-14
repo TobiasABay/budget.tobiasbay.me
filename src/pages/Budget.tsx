@@ -74,6 +74,7 @@ export default function Budget() {
     const { user, isLoaded } = useUser();
     const muiTheme = useTheme();
     const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
+    const isTablet = useMediaQuery(muiTheme.breakpoints.down('md'));
 
     // Helper function to check if an item is Nordnet
     const isNordnetItem = (item: LineItem): boolean => {
@@ -853,6 +854,7 @@ export default function Budget() {
                     overflow: 'auto',
                     width: '100%',
                     maxWidth: '100%',
+                    maxHeight: 'calc(100vh - 200px)',
                     '&::-webkit-scrollbar': {
                         height: '8px',
                     },
@@ -867,7 +869,12 @@ export default function Budget() {
                     <Table stickyHeader sx={{
                         tableLayout: isMobile ? 'auto' : 'fixed',
                         width: isMobile ? 'max-content' : '100%',
-                        minWidth: isMobile ? '800px' : 'auto'
+                        minWidth: isMobile ? '800px' : 'auto',
+                        '& .MuiTableHead-root': {
+                            position: 'sticky',
+                            top: 0,
+                            zIndex: 10,
+                        },
                     }}>
                         <TableHead>
                             <TableRow>
@@ -881,10 +888,11 @@ export default function Budget() {
                                         minWidth: isMobile ? '120px' : 'auto',
                                         padding: isMobile ? '8px 4px' : '12px 8px',
                                         fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        position: 'sticky',
+                                        top: 0,
+                                        zIndex: isMobile ? 11 : 10,
                                         ...(isMobile && {
-                                            position: 'sticky',
                                             left: 0,
-                                            zIndex: 3,
                                         }),
                                     }}
                                 >
@@ -902,6 +910,9 @@ export default function Budget() {
                                             minWidth: isMobile ? '60px' : 'auto',
                                             padding: isMobile ? '8px 2px' : '12px 4px',
                                             fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                            position: 'sticky',
+                                            top: 0,
+                                            zIndex: 10,
                                         }}
                                     >
                                         {month.substring(0, 3)}
@@ -1170,7 +1181,7 @@ export default function Budget() {
                                                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {item.name}
                                                     </span>
-                                                    {item.category && !isMobile && (
+                                                    {item.category && !isTablet && (
                                                         <Chip
                                                             label={item.category}
                                                             size="small"
