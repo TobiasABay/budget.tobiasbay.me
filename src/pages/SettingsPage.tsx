@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Divider, Chip, useMediaQuery, useTheme } from "@mui/material";
+import { Box, Typography, TextField, Button, Paper, List, ListItem, ListItemText, IconButton, CircularProgress, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Divider, Chip, useMediaQuery, useTheme, Switch } from "@mui/material";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
@@ -167,14 +167,34 @@ export default function SettingsPage() {
   const [stocksYears, setStocksYears] = useState<string[]>([]);
   const [stockYearDeleteDialogOpen, setStockYearDeleteDialogOpen] = useState<boolean>(false);
   const [stockYearToDelete, setStockYearToDelete] = useState<string | null>(null);
+  const [activeBudget, setActiveBudget] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
       loadBudgets();
       loadLoans();
       loadStocksYears();
+      loadActiveBudget();
     }
   }, [isLoaded, user?.id]);
+
+  const loadActiveBudget = () => {
+    const stored = localStorage.getItem('activeBudget');
+    if (stored) {
+      setActiveBudget(stored);
+    }
+  };
+
+  const handleToggleActiveBudget = (year: string, event: React.ChangeEvent<HTMLInputElement> | React.MouseEvent) => {
+    event.stopPropagation();
+    const newActiveBudget = activeBudget === year ? null : year;
+    setActiveBudget(newActiveBudget);
+    if (newActiveBudget) {
+      localStorage.setItem('activeBudget', newActiveBudget);
+    } else {
+      localStorage.removeItem('activeBudget');
+    }
+  };
 
   const loadStocksYears = () => {
     const storedYears = localStorage.getItem('stocks_years');
@@ -270,6 +290,11 @@ export default function SettingsPage() {
     try {
       const updatedBudgets = await deleteBudget(user.id, budgetToDelete);
       setBudgets(updatedBudgets);
+      // If the deleted budget was active, clear it
+      if (activeBudget === budgetToDelete) {
+        setActiveBudget(null);
+        localStorage.removeItem('activeBudget');
+      }
       setBudgetToDelete(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete budget');
@@ -624,24 +649,49 @@ export default function SettingsPage() {
                   <Box key={year}>
                     <ListItem
                       secondaryAction={
-                        <IconButton
-                          edge="end"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClick(year);
-                          }}
-                          sx={{
-                            color: theme.palette.error.main,
-                            '&:hover': {
-                              bgcolor: theme.palette.error.main,
-                              color: theme.palette.error.contrastText,
-                              transform: 'scale(1.1)',
-                            },
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                            <Typography sx={{ 
+                              fontSize: '0.7rem',
+                              fontWeight: activeBudget === year ? 600 : 400,
+                              color: activeBudget === year ? theme.palette.primary.main : theme.palette.text.secondary
+                            }}>
+                              Active
+                            </Typography>
+                            <Switch
+                              checked={activeBudget === year}
+                              onChange={(e) => handleToggleActiveBudget(year, e)}
+                              onClick={(e) => e.stopPropagation()}
+                              size="small"
+                              sx={{
+                                '& .MuiSwitch-switchBase.Mui-checked': {
+                                  color: theme.palette.primary.main,
+                                },
+                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                  backgroundColor: theme.palette.primary.main,
+                                },
+                              }}
+                            />
+                          </Box>
+                          <IconButton
+                            edge="end"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(year);
+                            }}
+                            sx={{
+                              color: theme.palette.error.main,
+                              '&:hover': {
+                                bgcolor: theme.palette.error.main,
+                                color: theme.palette.error.contrastText,
+                                transform: 'scale(1.1)',
+                              },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </Box>
                       }
                       sx={{
                         cursor: 'pointer',
