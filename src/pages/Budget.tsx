@@ -12,6 +12,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import InsightsIcon from '@mui/icons-material/Insights';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -88,6 +90,8 @@ export default function Budget() {
     const [editStaticExpenseDate, setEditStaticExpenseDate] = useState('');
     const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+    const [insightsModalOpen, setInsightsModalOpen] = useState(false);
+    const [selectedMonthForChart, setSelectedMonthForChart] = useState<string>('all');
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
 
@@ -584,6 +588,81 @@ export default function Budget() {
         setDragOverItemId(null);
     };
 
+    // Calculate insights
+    const calculateInsights = (selectedMonth?: string) => {
+        const monthlyData = MONTHS.map(month => {
+            const totalIncome = lineItems
+                .filter(item => item.type === 'income')
+                .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+            const totalExpense = lineItems
+                .filter(item => item.type === 'expense' && !isNordnetItem(item))
+                .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+            const savings = totalIncome - totalExpense;
+            const nordnetSavings = lineItems
+                .filter(item => isNordnetItem(item))
+                .reduce((sum, item) => sum + Math.abs(item.months[month] || 0), 0);
+
+            return {
+                month,
+                income: totalIncome,
+                expense: totalExpense,
+                savings,
+                nordnetSavings
+            };
+        });
+
+        const totalIncome = monthlyData.reduce((sum, m) => sum + m.income, 0);
+        const totalExpense = monthlyData.reduce((sum, m) => sum + m.expense, 0);
+        const totalSavings = totalIncome - totalExpense;
+        const totalNordnetSavings = monthlyData.reduce((sum, m) => sum + m.nordnetSavings, 0);
+        const averageMonthlySavings = totalSavings / MONTHS.length;
+        const averageMonthlyIncome = totalIncome / MONTHS.length;
+        const averageMonthlyExpense = totalExpense / MONTHS.length;
+
+        // Find best and worst months
+        const bestMonth = monthlyData.reduce((best, current) =>
+            current.savings > best.savings ? current : best, monthlyData[0] || { month: '', savings: 0 });
+        const worstMonth = monthlyData.reduce((worst, current) =>
+            current.savings < worst.savings ? current : worst, monthlyData[0] || { month: '', savings: 0 });
+
+        // Calculate savings rate
+        const savingsRate = totalIncome > 0 ? (totalSavings / totalIncome) * 100 : 0;
+
+        // Calculate fun expenses breakdown (filter by month if provided)
+        const funExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
+        const funExpensesByItem = funExpenses
+            .filter(item => {
+                if (!selectedMonth || selectedMonth === 'all') return true; // Show all if no month selected or "all" is selected
+                // Check if the expense date falls in the selected month
+                if (!item.staticExpenseDate) return false;
+                const expenseDate = new Date(item.staticExpenseDate);
+                const expenseMonthIndex = expenseDate.getMonth();
+                const selectedMonthIndex = MONTHS.indexOf(selectedMonth);
+                return expenseMonthIndex === selectedMonthIndex;
+            })
+            .map(item => ({
+                name: item.name,
+                amount: item.staticExpensePrice || 0
+            }));
+        const totalFunExpenses = funExpensesByItem.reduce((sum, item) => sum + item.amount, 0);
+
+        return {
+            monthlyData,
+            totalIncome,
+            totalExpense,
+            totalSavings,
+            totalNordnetSavings,
+            averageMonthlySavings,
+            averageMonthlyIncome,
+            averageMonthlyExpense,
+            bestMonth,
+            worstMonth,
+            savingsRate,
+            funExpensesByItem,
+            totalFunExpenses
+        };
+    };
+
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
             <Navbar />
@@ -598,6 +677,24 @@ export default function Budget() {
                     <Typography sx={{ color: theme.palette.text.primary }} variant={isMobile ? "h5" : "h4"}>
                         Budget {year}
                     </Typography>
+                    <IconButton
+                        onClick={() => setInsightsModalOpen(true)}
+                        disabled={!isLoaded || !user?.id || loading}
+                        sx={{
+                            color: theme.palette.info.main,
+                            bgcolor: theme.palette.background.paper,
+                            '&:hover': {
+                                bgcolor: theme.palette.info.main,
+                                color: theme.palette.info.contrastText || theme.palette.text.primary,
+                            },
+                            '&:disabled': {
+                                opacity: 0.5,
+                            },
+                        }}
+                        title="View Insights"
+                    >
+                        <InsightsIcon />
+                    </IconButton>
                     <IconButton
                         onClick={handleOpenMenu}
                         disabled={!isLoaded || !user?.id || loading}
@@ -2219,6 +2316,346 @@ export default function Budget() {
                             }}
                         >
                             Create
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Insights Modal */}
+                <Dialog
+                    open={insightsModalOpen}
+                    onClose={() => setInsightsModalOpen(false)}
+                    fullScreen={isMobile}
+                    maxWidth="lg"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            bgcolor: theme.palette.background.paper,
+                            color: theme.palette.text.primary,
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <BarChartIcon sx={{ color: theme.palette.info.main }} />
+                        <Typography variant="h6">Budget Insights - {year}</Typography>
+                    </DialogTitle>
+                    <DialogContent>
+                        {(() => {
+                            const insights = calculateInsights(selectedMonthForChart);
+                            const maxValue = Math.max(
+                                ...insights.monthlyData.map(m => Math.max(m.income, m.expense, m.savings)),
+                                1
+                            );
+
+                            return (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+                                    {/* Summary Cards */}
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                Total Income
+                                            </Typography>
+                                            <Typography sx={{ color: '#4caf50', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
+                                                {formatCurrency(insights.totalIncome, currency)}
+                                            </Typography>
+                                        </Paper>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                Total Expenses
+                                            </Typography>
+                                            <Typography sx={{ color: '#f44336', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
+                                                {formatCurrency(insights.totalExpense, currency)}
+                                            </Typography>
+                                        </Paper>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                Total Savings
+                                            </Typography>
+                                            <Typography sx={{
+                                                color: insights.totalSavings >= 0 ? '#4caf50' : '#f44336',
+                                                fontSize: '1.5rem',
+                                                fontWeight: 'bold',
+                                                mt: 0.5
+                                            }}>
+                                                {formatCurrency(insights.totalSavings, currency)}
+                                            </Typography>
+                                        </Paper>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                Savings Rate
+                                            </Typography>
+                                            <Typography sx={{
+                                                color: insights.savingsRate >= 0 ? '#4caf50' : '#f44336',
+                                                fontSize: '1.5rem',
+                                                fontWeight: 'bold',
+                                                mt: 0.5
+                                            }}>
+                                                {insights.savingsRate.toFixed(1)}%
+                                            </Typography>
+                                        </Paper>
+                                    </Box>
+
+                                    {/* Monthly Chart */}
+                                    <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                        <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary }}>
+                                            Monthly Overview
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                            {insights.monthlyData.map((data) => {
+                                                const incomePercent = (data.income / maxValue) * 100;
+                                                const expensePercent = (data.expense / maxValue) * 100;
+
+                                                return (
+                                                    <Box key={data.month} sx={{ mb: 2 }}>
+                                                        <Typography sx={{ fontSize: '0.875rem', mb: 0.5, color: theme.palette.text.primary }}>
+                                                            {data.month}
+                                                        </Typography>
+                                                        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.5, mb: 0.5 }}>
+                                                            <Box sx={{
+                                                                flex: incomePercent / 100,
+                                                                height: '20px',
+                                                                bgcolor: '#4caf50',
+                                                                borderRadius: '4px 4px 0 0',
+                                                                minWidth: '2px'
+                                                            }} />
+                                                            <Box sx={{
+                                                                flex: expensePercent / 100,
+                                                                height: '20px',
+                                                                bgcolor: '#f44336',
+                                                                borderRadius: '4px 4px 0 0',
+                                                                minWidth: '2px'
+                                                            }} />
+                                                        </Box>
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: theme.palette.text.secondary }}>
+                                                            <span>Income: {formatCurrency(data.income, currency)}</span>
+                                                            <span>Expense: {formatCurrency(data.expense, currency)}</span>
+                                                            <span style={{
+                                                                color: data.savings >= 0 ? '#4caf50' : '#f44336',
+                                                                fontWeight: 'bold'
+                                                            }}>
+                                                                Savings: {formatCurrency(data.savings, currency)}
+                                                            </span>
+                                                        </Box>
+                                                    </Box>
+                                                );
+                                            })}
+                                        </Box>
+                                    </Paper>
+
+                                    {/* Fun Expenses Pie Chart */}
+                                    {insights.totalFunExpenses > 0 && (
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                                <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+                                                    Fun Expenses Breakdown
+                                                </Typography>
+                                                <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                    <Select
+                                                        value={selectedMonthForChart}
+                                                        onChange={(e) => setSelectedMonthForChart(e.target.value)}
+                                                        sx={{
+                                                            color: theme.palette.text.primary,
+                                                            '& .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.secondary.main,
+                                                            },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                        }}
+                                                        MenuProps={{
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.palette.background.paper,
+                                                                    color: theme.palette.text.primary,
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        <MenuItem value="all">All Months</MenuItem>
+                                                        {MONTHS.map((month) => (
+                                                            <MenuItem key={month} value={month}>
+                                                                {month}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 3, alignItems: 'center' }}>
+                                                {/* Pie Chart */}
+                                                <Box sx={{ position: 'relative', width: isMobile ? '100%' : '250px', height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                    <svg width="250" height="250" viewBox="0 0 250 250" style={{ transform: 'rotate(-90deg)' }}>
+                                                        {(() => {
+                                                            let currentAngle = 0;
+                                                            const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
+                                                            return insights.funExpensesByItem.map((item, index) => {
+                                                                const percentage = (item.amount / insights.totalFunExpenses) * 100;
+                                                                const angle = (percentage / 100) * 360;
+                                                                const startAngle = currentAngle;
+                                                                const endAngle = currentAngle + angle;
+                                                                currentAngle = endAngle;
+
+                                                                const startAngleRad = (startAngle * Math.PI) / 180;
+                                                                const endAngleRad = (endAngle * Math.PI) / 180;
+                                                                const largeArcFlag = angle > 180 ? 1 : 0;
+
+                                                                const x1 = 125 + 100 * Math.cos(startAngleRad);
+                                                                const y1 = 125 + 100 * Math.sin(startAngleRad);
+                                                                const x2 = 125 + 100 * Math.cos(endAngleRad);
+                                                                const y2 = 125 + 100 * Math.sin(endAngleRad);
+
+                                                                const pathData = [
+                                                                    `M 125 125`,
+                                                                    `L ${x1} ${y1}`,
+                                                                    `A 100 100 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                                                                    `Z`
+                                                                ].join(' ');
+
+                                                                return (
+                                                                    <path
+                                                                        key={index}
+                                                                        d={pathData}
+                                                                        fill={colors[index % colors.length]}
+                                                                        stroke={theme.palette.background.paper}
+                                                                        strokeWidth="2"
+                                                                    />
+                                                                );
+                                                            });
+                                                        })()}
+                                                    </svg>
+                                                    <Box sx={{
+                                                        position: 'absolute',
+                                                        top: '50%',
+                                                        left: '50%',
+                                                        transform: 'translate(-50%, -50%)',
+                                                        textAlign: 'center'
+                                                    }}>
+                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                            Total
+                                                        </Typography>
+                                                        <Typography sx={{ fontSize: '1.25rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
+                                                            {formatCurrency(insights.totalFunExpenses, currency)}
+                                                        </Typography>
+                                                    </Box>
+                                                </Box>
+
+                                                {/* Legend */}
+                                                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                    {insights.funExpensesByItem.map((item, index) => {
+                                                        const percentage = (item.amount / insights.totalFunExpenses) * 100;
+                                                        const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
+                                                        return (
+                                                            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                                <Box sx={{
+                                                                    width: '16px',
+                                                                    height: '16px',
+                                                                    borderRadius: '4px',
+                                                                    bgcolor: colors[index % colors.length]
+                                                                }} />
+                                                                <Box sx={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.primary }}>
+                                                                        {item.name}
+                                                                    </Typography>
+                                                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                                            {percentage.toFixed(1)}%
+                                                                        </Typography>
+                                                                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
+                                                                            {formatCurrency(item.amount, currency)}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                </Box>
+                                                            </Box>
+                                                        );
+                                                    })}
+                                                </Box>
+                                            </Box>
+                                        </Paper>
+                                    )}
+
+                                    {/* Statistics */}
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography variant="h6" sx={{ mb: 1, color: theme.palette.text.primary }}>
+                                                Averages
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                <Box>
+                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        Monthly Income
+                                                    </Typography>
+                                                    <Typography sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+                                                        {formatCurrency(insights.averageMonthlyIncome, currency)}
+                                                    </Typography>
+                                                </Box>
+                                                <Box>
+                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        Monthly Expense
+                                                    </Typography>
+                                                    <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
+                                                        {formatCurrency(insights.averageMonthlyExpense, currency)}
+                                                    </Typography>
+                                                </Box>
+                                                <Box>
+                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        Monthly Savings
+                                                    </Typography>
+                                                    <Typography sx={{
+                                                        color: insights.averageMonthlySavings >= 0 ? '#4caf50' : '#f44336',
+                                                        fontWeight: 'bold'
+                                                    }}>
+                                                        {formatCurrency(insights.averageMonthlySavings, currency)}
+                                                    </Typography>
+                                                </Box>
+                                            </Box>
+                                        </Paper>
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography variant="h6" sx={{ mb: 1, color: theme.palette.text.primary }}>
+                                                Highlights
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                <Box>
+                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        Best Month
+                                                    </Typography>
+                                                    <Typography sx={{ color: '#4caf50', fontWeight: 'bold' }}>
+                                                        {insights.bestMonth.month}: {formatCurrency(insights.bestMonth.savings, currency)}
+                                                    </Typography>
+                                                </Box>
+                                                <Box>
+                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        Worst Month
+                                                    </Typography>
+                                                    <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
+                                                        {insights.worstMonth.month}: {formatCurrency(insights.worstMonth.savings, currency)}
+                                                    </Typography>
+                                                </Box>
+                                                {insights.totalNordnetSavings > 0 && (
+                                                    <Box>
+                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                            Nordnet Savings
+                                                        </Typography>
+                                                        <Typography sx={{ color: '#9c27b0', fontWeight: 'bold' }}>
+                                                            {formatCurrency(insights.totalNordnetSavings, currency)}
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+                                            </Box>
+                                        </Paper>
+                                    </Box>
+                                </Box>
+                            );
+                        })()}
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            onClick={() => setInsightsModalOpen(false)}
+                            sx={{
+                                color: theme.palette.text.secondary,
+                            }}
+                        >
+                            Close
                         </Button>
                     </DialogActions>
                 </Dialog>
