@@ -11,6 +11,7 @@ import LocalActivityIcon from '@mui/icons-material/LocalActivity';
 import EditIcon from '@mui/icons-material/Edit';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -56,6 +57,11 @@ export default function Budget() {
     const { user, isLoaded } = useUser();
     const muiTheme = useTheme();
     const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
+
+    // Helper function to check if an item is Nordnet
+    const isNordnetItem = (item: LineItem): boolean => {
+        return item.type === 'expense' && item.name.toLowerCase().trim().includes('nordnet');
+    };
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<'income' | 'expense' | 'loan' | 'staticExpense' | null>(null);
     const [itemName, setItemName] = useState('');
@@ -919,7 +925,7 @@ export default function Budget() {
                             </TableRow>
                             {/* Regular Expense Items */}
                             {lineItems
-                                .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense)
+                                .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
                                 .map((item) => {
                                     return (
                                         <TableRow
@@ -1064,59 +1070,156 @@ export default function Budget() {
                                         </TableRow>
                                     );
                                 })}
-                            {/* Fun Expenses Summary Row */}
-                            {(() => {
-                                const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
-                                if (staticExpenses.length === 0) return null;
-
-                                return (
-                                    <TableRow>
-                                        <TableCell
+                            {/* Nordnet Items (Stock Savings) */}
+                            {lineItems
+                                .filter(item => isNordnetItem(item))
+                                .map((item) => {
+                                    return (
+                                        <TableRow
+                                            key={item.id}
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, item.id)}
+                                            onDragOver={(e) => handleDragOver(e, item.id)}
+                                            onDragLeave={handleDragLeave}
+                                            onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                            onDragEnd={handleDragEnd}
                                             sx={{
-                                                color: theme.palette.warning.main,
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: '12px 8px',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                                ...(isMobile && {
-                                                    position: 'sticky',
-                                                    left: 0,
-                                                    zIndex: 2,
-                                                }),
+                                                opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                cursor: 'move',
+                                                '&:hover': {
+                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                },
                                             }}
                                         >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <LocalActivityIcon
-                                                    sx={{
-                                                        fontSize: '1rem',
-                                                        color: theme.palette.warning.main,
-                                                        opacity: 0.8
-                                                    }}
-                                                />
-                                                <span>Fun Expenses</span>
-                                            </Box>
-                                        </TableCell>
-                                        {MONTHS.map((month) => {
-                                            const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                            return (
-                                                <TableCell
-                                                    key={month}
-                                                    align="center"
-                                                    sx={{
-                                                        color: theme.palette.warning.main,
-                                                        padding: '12px 4px',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 'bold',
-                                                        bgcolor: theme.palette.background.default,
-                                                    }}
-                                                >
-                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
-                                                </TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                );
-                            })()}
+                                            <TableCell
+                                                onClick={() => handleNameCellClick(item.id)}
+                                                sx={{
+                                                    color: '#9c27b0', // Purple color for Nordnet/stock savings
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: isMobile ? '8px 4px' : '12px 8px',
+                                                    cursor: 'pointer',
+                                                    fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                    bgcolor: theme.palette.background.paper,
+                                                    ...(isMobile && {
+                                                        position: 'sticky',
+                                                        left: 0,
+                                                        zIndex: 2,
+                                                    }),
+                                                    '&:hover': {
+                                                        bgcolor: 'transparent',
+                                                    },
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    {selectedItemForDelete === item.id && (
+                                                        <DragIndicatorIcon
+                                                            sx={{
+                                                                color: theme.palette.text.secondary,
+                                                                fontSize: '1.2rem',
+                                                                cursor: 'grab',
+                                                                '&:active': {
+                                                                    cursor: 'grabbing',
+                                                                },
+                                                            }}
+                                                        />
+                                                    )}
+                                                    <TrendingUpIcon
+                                                        sx={{
+                                                            fontSize: '1rem',
+                                                            color: '#9c27b0',
+                                                            opacity: 0.9
+                                                        }}
+                                                    />
+                                                    <span style={{ flex: 1 }}>
+                                                        {item.name}
+                                                    </span>
+                                                    {selectedItemForDelete === item.id && (
+                                                        <IconButton
+                                                            size="small"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteItem(item.id);
+                                                            }}
+                                                            sx={{
+                                                                color: '#9c27b0',
+                                                                padding: '4px',
+                                                                '&:hover': {
+                                                                    bgcolor: '#9c27b0',
+                                                                    color: theme.palette.primary.contrastText,
+                                                                },
+                                                            }}
+                                                        >
+                                                            <DeleteIcon />
+                                                        </IconButton>
+                                                    )}
+                                                </Box>
+                                            </TableCell>
+                                            {MONTHS.map((month) => {
+                                                const cellValue = item.months[month] || 0;
+                                                const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                return (
+                                                    <TableCell
+                                                        key={month}
+                                                        onClick={() => !isEditing && handleCellClick(item.id, month)}
+                                                        align="center"
+                                                        sx={{
+                                                            color: '#9c27b0',
+                                                            padding: '8px 4px',
+                                                            cursor: isEditing ? 'default' : 'pointer',
+                                                            bgcolor: theme.palette.background.paper,
+                                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                            '&:hover': {
+                                                                bgcolor: isEditing ? 'transparent' : theme.palette.background.default,
+                                                            },
+                                                        }}
+                                                    >
+                                                        {isEditing ? (
+                                                            <TextField
+                                                                value={editValue}
+                                                                onChange={(e) => setEditValue(e.target.value)}
+                                                                onBlur={handleCellSave}
+                                                                onKeyPress={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        handleCellSave();
+                                                                    } else if (e.key === 'Escape') {
+                                                                        setEditingCell(null);
+                                                                        setEditValue('');
+                                                                    }
+                                                                }}
+                                                                autoFocus
+                                                                size="small"
+                                                                inputProps={{
+                                                                    style: {
+                                                                        textAlign: 'center',
+                                                                        padding: '4px',
+                                                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                                    }
+                                                                }}
+                                                                sx={{
+                                                                    width: '100%',
+                                                                    '& .MuiOutlinedInput-root': {
+                                                                        '& fieldset': {
+                                                                            borderColor: '#9c27b0',
+                                                                        },
+                                                                        '&:hover fieldset': {
+                                                                            borderColor: '#9c27b0',
+                                                                        },
+                                                                        '&.Mui-focused fieldset': {
+                                                                            borderColor: '#9c27b0',
+                                                                        },
+                                                                    },
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            cellValue === 0 ? '-' : formatCurrency(cellValue, currency)
+                                                        )}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
+                                    );
+                                })}
                             {/* Loan Items */}
                             {lineItems
                                 .filter(item => item.type === 'expense' && item.isLoan)
@@ -1239,6 +1342,59 @@ export default function Budget() {
                                         </TableRow>
                                     );
                                 })}
+                            {/* Fun Expenses Summary Row */}
+                            {(() => {
+                                const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
+                                if (staticExpenses.length === 0) return null;
+
+                                return (
+                                    <TableRow>
+                                        <TableCell
+                                            sx={{
+                                                color: theme.palette.warning.main,
+                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                padding: '12px 8px',
+                                                fontWeight: 'bold',
+                                                bgcolor: theme.palette.background.default,
+                                                ...(isMobile && {
+                                                    position: 'sticky',
+                                                    left: 0,
+                                                    zIndex: 2,
+                                                }),
+                                            }}
+                                        >
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <LocalActivityIcon
+                                                    sx={{
+                                                        fontSize: '1rem',
+                                                        color: theme.palette.warning.main,
+                                                        opacity: 0.8
+                                                    }}
+                                                />
+                                                <span>Fun Expenses</span>
+                                            </Box>
+                                        </TableCell>
+                                        {MONTHS.map((month) => {
+                                            const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                            return (
+                                                <TableCell
+                                                    key={month}
+                                                    align="center"
+                                                    sx={{
+                                                        color: theme.palette.warning.main,
+                                                        padding: '12px 4px',
+                                                        fontSize: '0.875rem',
+                                                        fontWeight: 'bold',
+                                                        bgcolor: theme.palette.background.default,
+                                                    }}
+                                                >
+                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
+                                                </TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                );
+                            })()}
                             {/* Total Expense Row */}
                             <TableRow>
                                 <TableCell
@@ -1260,8 +1416,9 @@ export default function Budget() {
                                     Total Expense
                                 </TableCell>
                                 {MONTHS.map((month) => {
+                                    // Total expenses excluding Nordnet (Nordnet is savings, not an expense)
                                     const totalExpense = lineItems
-                                        .filter(item => item.type === 'expense')
+                                        .filter(item => item.type === 'expense' && !isNordnetItem(item))
                                         .reduce((sum, item) => sum + (item.months[month] || 0), 0);
 
                                     return (
@@ -1314,12 +1471,15 @@ export default function Budget() {
                                     Savings
                                 </TableCell>
                                 {MONTHS.map((month) => {
+                                    // Calculate income (all income items)
                                     const totalIncome = lineItems
                                         .filter(item => item.type === 'income')
                                         .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                    // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
                                     const totalExpense = lineItems
-                                        .filter(item => item.type === 'expense')
+                                        .filter(item => item.type === 'expense' && !isNordnetItem(item))
                                         .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                    // Savings = Income - Expenses (Nordnet excluded)
                                     const savings = totalIncome - totalExpense;
 
                                     return (
@@ -1363,12 +1523,15 @@ export default function Budget() {
                                     let cumulativeSavings = 0;
                                     for (let i = 0; i <= monthIndex; i++) {
                                         const currentMonth = MONTHS[i];
+                                        // Calculate income (all income items)
                                         const totalIncome = lineItems
                                             .filter(item => item.type === 'income')
                                             .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
+                                        // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
                                         const totalExpense = lineItems
-                                            .filter(item => item.type === 'expense')
+                                            .filter(item => item.type === 'expense' && !isNordnetItem(item))
                                             .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
+                                        // Cumulative Savings = Income - Expenses (Nordnet excluded)
                                         cumulativeSavings += totalIncome - totalExpense;
                                     }
 
@@ -1385,6 +1548,55 @@ export default function Budget() {
                                             }}
                                         >
                                             {cumulativeSavings === 0 ? '-' : formatCurrency(cumulativeSavings, currency)}
+                                        </TableCell>
+                                    );
+                                })}
+                            </TableRow>
+                            {/* Nordnet Savings Row */}
+                            <TableRow>
+                                <TableCell
+                                    colSpan={1}
+                                    sx={{
+                                        color: theme.palette.info.main,
+                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                        fontWeight: 'bold',
+                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                        bgcolor: theme.palette.background.default,
+                                        ...(isMobile && {
+                                            position: 'sticky',
+                                            left: 0,
+                                            zIndex: 2,
+                                        }),
+                                    }}
+                                >
+                                    Nordnet Savings
+                                </TableCell>
+                                {MONTHS.map((month, monthIndex) => {
+                                    let cumulativeNordnetSavings = 0;
+                                    for (let i = 0; i <= monthIndex; i++) {
+                                        const currentMonth = MONTHS[i];
+                                        const nordnetExpense = lineItems
+                                            .filter(item => isNordnetItem(item))
+                                            .reduce((sum, item) => sum + Math.abs(item.months[currentMonth] || 0), 0);
+                                        // Nordnet expenses are actually savings, so we treat them as positive savings
+                                        cumulativeNordnetSavings += nordnetExpense;
+                                    }
+
+                                    return (
+                                        <TableCell
+                                            key={month}
+                                            align="center"
+                                            sx={{
+                                                color: cumulativeNordnetSavings >= 0 ? theme.palette.success.main : theme.palette.error.main,
+                                                padding: '12px 4px',
+                                                fontSize: '0.875rem',
+                                                fontWeight: 'bold',
+                                                bgcolor: theme.palette.background.default,
+                                                opacity: 0.8,
+                                            }}
+                                        >
+                                            {cumulativeNordnetSavings === 0 ? '-' : formatCurrency(cumulativeNordnetSavings, currency)}
                                         </TableCell>
                                     );
                                 })}
