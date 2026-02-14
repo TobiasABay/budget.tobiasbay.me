@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -26,6 +26,20 @@ const MONTHS = [
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const EXPENSE_CATEGORIES = [
+    'Housing',
+    'Insurance',
+    'Food',
+    'Transportation',
+    'Utilities',
+    'Healthcare',
+    'Fitness',
+    'Entertainment',
+    'Shopping',
+    'Education',
+    'Other'
+];
+
 interface LineItem {
     id: string;
     name: string;
@@ -42,6 +56,7 @@ interface LineItem {
     isStaticExpense?: boolean;
     staticExpenseDate?: string; // Format: "YYYY-MM-DD"
     staticExpensePrice?: number;
+    category?: string; // Expense category
 }
 
 interface Loan {
@@ -76,6 +91,7 @@ export default function Budget() {
     const [staticExpenseDate, setStaticExpenseDate] = useState('');
     const [staticExpensePrice, setStaticExpensePrice] = useState('');
     const [linkedLoanId, setLinkedLoanId] = useState<string>('');
+    const [expenseCategory, setExpenseCategory] = useState<string>('');
     const [loans, setLoans] = useState<Loan[]>([]);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
@@ -92,6 +108,41 @@ export default function Budget() {
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [insightsModalOpen, setInsightsModalOpen] = useState(false);
     const [selectedMonthForChart, setSelectedMonthForChart] = useState<string>('all');
+    const [editExpenseModalOpen, setEditExpenseModalOpen] = useState(false);
+    const [editingExpenseItem, setEditingExpenseItem] = useState<LineItem | null>(null);
+    const [editExpenseName, setEditExpenseName] = useState<string>('');
+    const [editExpenseCategory, setEditExpenseCategory] = useState<string>('');
+
+    const handleOpenEditExpenseModal = (item: LineItem) => {
+        setEditingExpenseItem(item);
+        setEditExpenseName(item.name);
+        setEditExpenseCategory(item.category || '');
+        setEditExpenseModalOpen(true);
+    };
+
+    const handleCloseEditExpenseModal = () => {
+        setEditExpenseModalOpen(false);
+        setEditingExpenseItem(null);
+        setEditExpenseName('');
+        setEditExpenseCategory('');
+    };
+
+    const handleSaveExpenseEdit = () => {
+        if (!editingExpenseItem || !editExpenseName.trim()) return;
+
+        const updatedItems = lineItems.map(item => {
+            if (item.id === editingExpenseItem.id) {
+                return {
+                    ...item,
+                    name: editExpenseName.trim(),
+                    category: editExpenseCategory || undefined
+                };
+            }
+            return item;
+        });
+        setLineItems(updatedItems);
+        handleCloseEditExpenseModal();
+    };
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
 
@@ -260,8 +311,9 @@ export default function Budget() {
         try {
             // Ensure items with static expense properties are marked as static expenses before saving
             // Also merge formulas back into months._formulas for persistence
+            // Category field is automatically included via spread operator
             const normalizedItems = lineItems.map((item: LineItem) => {
-                const normalizedItem = { ...item };
+                const normalizedItem = { ...item }; // Includes all fields: name, type, months, category, etc.
 
                 // Merge formulas back into months._formulas if they exist
                 if (item.formulas && Object.keys(item.formulas).length > 0) {
@@ -273,6 +325,8 @@ export default function Budget() {
                 if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
                     normalizedItem.isStaticExpense = true;
                 }
+
+                // Category field is automatically preserved via spread operator above
                 return normalizedItem;
             });
             const encodedYear = encodeURIComponent(year);
@@ -316,6 +370,7 @@ export default function Budget() {
         setStaticExpenseDate('');
         setStaticExpensePrice('');
         setLinkedLoanId('');
+        setExpenseCategory('');
         handleCloseMenu();
     };
 
@@ -332,6 +387,7 @@ export default function Budget() {
         setStaticExpenseDate('');
         setStaticExpensePrice('');
         setLinkedLoanId('');
+        setExpenseCategory('');
     };
 
     const handleCreateItem = () => {
@@ -384,6 +440,9 @@ export default function Budget() {
                 isStaticExpense: true,
                 staticExpenseDate: staticExpenseDate,
                 staticExpensePrice: parseFloat(staticExpensePrice) || 0
+            }),
+            ...(itemType === 'expense' && expenseCategory && {
+                category: expenseCategory
             })
         };
 
@@ -646,6 +705,22 @@ export default function Budget() {
             }));
         const totalFunExpenses = funExpensesByItem.reduce((sum, item) => sum + item.amount, 0);
 
+        // Calculate expenses by category
+        const expensesByCategory: { [key: string]: number } = {};
+        lineItems
+            .filter(item => item.type === 'expense' && !isNordnetItem(item))
+            .forEach(item => {
+                const category = item.category || 'Other';
+                const categoryTotal = MONTHS.reduce((sum, month) => {
+                    return sum + (item.months[month] || 0);
+                }, 0);
+                expensesByCategory[category] = (expensesByCategory[category] || 0) + categoryTotal;
+            });
+
+        const categoryBreakdown = Object.entries(expensesByCategory)
+            .map(([category, amount]) => ({ category, amount }))
+            .sort((a, b) => b.amount - a.amount);
+
         return {
             monthlyData,
             totalIncome,
@@ -659,7 +734,8 @@ export default function Budget() {
             worstMonth,
             savingsRate,
             funExpensesByItem,
-            totalFunExpenses
+            totalFunExpenses,
+            categoryBreakdown
         };
     };
 
@@ -1088,24 +1164,56 @@ export default function Budget() {
                                                     <span style={{ flex: 1 }}>
                                                         {item.name}
                                                     </span>
-                                                    {selectedItemForDelete === item.id && (
-                                                        <IconButton
+                                                    {item.category && (
+                                                        <Chip
+                                                            label={item.category}
                                                             size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteItem(item.id);
-                                                            }}
                                                             sx={{
-                                                                color: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
-                                                                padding: '4px',
-                                                                '&:hover': {
-                                                                    bgcolor: item.linkedLoanId ? theme.palette.info.main : theme.palette.error.main,
-                                                                    color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.error.contrastText,
-                                                                },
+                                                                fontSize: '0.7rem',
+                                                                height: '24px',
+                                                                bgcolor: theme.palette.background.default,
+                                                                color: theme.palette.text.primary,
                                                             }}
-                                                        >
-                                                            <DeleteIcon fontSize="small" />
-                                                        </IconButton>
+                                                        />
+                                                    )}
+                                                    {selectedItemForDelete === item.id && (
+                                                        <>
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleOpenEditExpenseModal(item);
+                                                                }}
+                                                                sx={{
+                                                                    color: theme.palette.primary.main,
+                                                                    padding: '4px',
+                                                                    '&:hover': {
+                                                                        bgcolor: theme.palette.primary.main,
+                                                                        color: theme.palette.primary.contrastText,
+                                                                    },
+                                                                }}
+                                                                title="Edit Expense"
+                                                            >
+                                                                <EditIcon fontSize="small" />
+                                                            </IconButton>
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item.id);
+                                                                }}
+                                                                sx={{
+                                                                    color: item.linkedLoanId ? theme.palette.info.main : '#f44336',
+                                                                    padding: '4px',
+                                                                    '&:hover': {
+                                                                        bgcolor: item.linkedLoanId ? theme.palette.info.main : '#f44336',
+                                                                        color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.primary.contrastText,
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        </>
                                                     )}
                                                 </Box>
                                             </TableCell>
@@ -2235,6 +2343,47 @@ export default function Budget() {
                                             },
                                         }}
                                     />
+                                    {selectedType === 'expense' && (
+                                        <FormControl fullWidth>
+                                            <InputLabel sx={{
+                                                color: theme.palette.text.secondary,
+                                                '&.Mui-focused': {
+                                                    color: theme.palette.primary.main,
+                                                },
+                                            }}>Category</InputLabel>
+                                            <Select
+                                                value={expenseCategory}
+                                                onChange={(e) => setExpenseCategory(e.target.value)}
+                                                label="Category"
+                                                sx={{
+                                                    color: theme.palette.text.primary,
+                                                    '& .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.secondary.main,
+                                                    },
+                                                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.primary.main,
+                                                    },
+                                                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: theme.palette.primary.main,
+                                                    },
+                                                }}
+                                                MenuProps={{
+                                                    PaperProps: {
+                                                        sx: {
+                                                            bgcolor: theme.palette.background.paper,
+                                                            color: theme.palette.text.primary,
+                                                        }
+                                                    }
+                                                }}
+                                            >
+                                                {EXPENSE_CATEGORIES.map((category) => (
+                                                    <MenuItem key={category} value={category}>
+                                                        {category}
+                                                    </MenuItem>
+                                                ))}
+                                            </Select>
+                                        </FormControl>
+                                    )}
                                     {selectedType === 'expense' && loans.length > 0 && (
                                         <FormControl fullWidth>
                                             <Select
@@ -2283,7 +2432,7 @@ export default function Budget() {
                         </Button>
                         <Button
                             onClick={handleCreateItem}
-                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : isStaticExpense ? (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) : (!selectedType || !itemName.trim())}
+                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : isStaticExpense ? (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) : (!selectedType || !itemName.trim() || (selectedType === 'expense' && !expenseCategory))}
                             variant="contained"
                             sx={{
                                 color: isLoan
@@ -2574,6 +2723,53 @@ export default function Budget() {
                                         </Paper>
                                     )}
 
+                                    {/* Category Breakdown */}
+                                    {insights.categoryBreakdown.length > 0 && (
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary }}>
+                                                Expenses by Category
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                                {insights.categoryBreakdown.map((item, index) => {
+                                                    const percentage = (item.amount / insights.totalExpense) * 100;
+                                                    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50'];
+                                                    return (
+                                                        <Box key={item.category}>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                                                <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.primary, fontWeight: 500 }}>
+                                                                    {item.category}
+                                                                </Typography>
+                                                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                                        {percentage.toFixed(1)}%
+                                                                    </Typography>
+                                                                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#f44336', minWidth: '80px', textAlign: 'right' }}>
+                                                                        {formatCurrency(item.amount, currency)}
+                                                                    </Typography>
+                                                                </Box>
+                                                            </Box>
+                                                            <Box sx={{
+                                                                width: '100%',
+                                                                height: '8px',
+                                                                bgcolor: theme.palette.background.paper,
+                                                                borderRadius: '4px',
+                                                                overflow: 'hidden'
+                                                            }}>
+                                                                <Box sx={{
+                                                                    width: `${percentage}%`,
+                                                                    height: '100%',
+                                                                    bgcolor: colors[index % colors.length],
+                                                                    borderRadius: '4px',
+                                                                    transition: 'width 0.3s ease'
+                                                                }} />
+                                                            </Box>
+                                                        </Box>
+                                                    );
+                                                })}
+                                            </Box>
+                                        </Paper>
+                                    )}
+
                                     {/* Statistics */}
                                     <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
@@ -2656,6 +2852,132 @@ export default function Budget() {
                             }}
                         >
                             Close
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Edit Expense Modal */}
+                <Dialog
+                    open={editExpenseModalOpen}
+                    onClose={handleCloseEditExpenseModal}
+                    fullScreen={isMobile}
+                    maxWidth="sm"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            bgcolor: theme.palette.background.paper,
+                            color: theme.palette.text.primary,
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <EditIcon sx={{ color: theme.palette.primary.main }} />
+                        <Typography variant="h6">Edit Expense</Typography>
+                    </DialogTitle>
+                    <DialogContent>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                            <TextField
+                                label="Name"
+                                value={editExpenseName}
+                                onChange={(e) => setEditExpenseName(e.target.value)}
+                                fullWidth
+                                autoFocus
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter' && editExpenseName.trim()) {
+                                        handleSaveExpenseEdit();
+                                    }
+                                }}
+                                sx={{
+                                    '& .MuiOutlinedInput-root': {
+                                        color: theme.palette.text.primary,
+                                        '& fieldset': {
+                                            borderColor: theme.palette.secondary.main,
+                                        },
+                                        '&:hover fieldset': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                        '&.Mui-focused fieldset': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                    },
+                                    '& .MuiInputLabel-root': {
+                                        color: theme.palette.text.secondary,
+                                        '&.Mui-focused': {
+                                            color: theme.palette.primary.main,
+                                        },
+                                    },
+                                }}
+                            />
+                            <FormControl fullWidth>
+                                <InputLabel sx={{
+                                    color: theme.palette.text.secondary,
+                                    '&.Mui-focused': {
+                                        color: theme.palette.primary.main,
+                                    },
+                                }}>Category</InputLabel>
+                                <Select
+                                    value={editExpenseCategory}
+                                    onChange={(e) => setEditExpenseCategory(e.target.value)}
+                                    label="Category"
+                                    sx={{
+                                        color: theme.palette.text.primary,
+                                        '& .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: theme.palette.secondary.main,
+                                        },
+                                        '&:hover .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                            borderColor: theme.palette.primary.main,
+                                        },
+                                    }}
+                                    MenuProps={{
+                                        PaperProps: {
+                                            sx: {
+                                                bgcolor: theme.palette.background.paper,
+                                                color: theme.palette.text.primary,
+                                            }
+                                        }
+                                    }}
+                                >
+                                    {EXPENSE_CATEGORIES.map((category) => (
+                                        <MenuItem key={category} value={category}>
+                                            {category}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button
+                            onClick={handleCloseEditExpenseModal}
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': {
+                                    bgcolor: theme.palette.background.default,
+                                },
+                            }}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleSaveExpenseEdit}
+                            disabled={!editExpenseName.trim()}
+                            variant="contained"
+                            sx={{
+                                bgcolor: '#f44336',
+                                color: theme.palette.primary.contrastText,
+                                '&:hover': {
+                                    bgcolor: '#d32f2f',
+                                },
+                                '&:disabled': {
+                                    bgcolor: theme.palette.background.default,
+                                    color: theme.palette.text.secondary,
+                                },
+                            }}
+                        >
+                            Save
                         </Button>
                     </DialogActions>
                 </Dialog>
