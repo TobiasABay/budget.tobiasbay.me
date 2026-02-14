@@ -2652,53 +2652,49 @@ export default function Budget() {
                                             </Box>
                                             <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 3, alignItems: 'center' }}>
                                                 {/* Pie Chart */}
-                                                <Box sx={{ position: 'relative', width: isMobile ? '100%' : '250px', height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                                    <svg width="250" height="250" viewBox="0 0 250 250" style={{ transform: 'rotate(-90deg)' }}>
-                                                        {(() => {
-                                                            let currentAngle = 0;
-                                                            const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
-                                                            return insights.funExpensesByItem.map((item, index) => {
-                                                                const percentage = (item.amount / insights.totalFunExpenses) * 100;
-                                                                const angle = (percentage / 100) * 360;
-                                                                const startAngle = currentAngle;
-                                                                const endAngle = currentAngle + angle;
-                                                                currentAngle = endAngle;
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                                    <Box sx={{ width: isMobile ? '100%' : '250px', height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                                        <svg width="250" height="250" viewBox="0 0 250 250" style={{ transform: 'rotate(-90deg)' }}>
+                                                            {(() => {
+                                                                let currentAngle = 0;
+                                                                const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
+                                                                return insights.funExpensesByItem.map((item, index) => {
+                                                                    const percentage = (item.amount / insights.totalFunExpenses) * 100;
+                                                                    const angle = (percentage / 100) * 360;
+                                                                    const startAngle = currentAngle;
+                                                                    const endAngle = currentAngle + angle;
+                                                                    currentAngle = endAngle;
 
-                                                                const startAngleRad = (startAngle * Math.PI) / 180;
-                                                                const endAngleRad = (endAngle * Math.PI) / 180;
-                                                                const largeArcFlag = angle > 180 ? 1 : 0;
+                                                                    const startAngleRad = (startAngle * Math.PI) / 180;
+                                                                    const endAngleRad = (endAngle * Math.PI) / 180;
+                                                                    const largeArcFlag = angle > 180 ? 1 : 0;
 
-                                                                const x1 = 125 + 100 * Math.cos(startAngleRad);
-                                                                const y1 = 125 + 100 * Math.sin(startAngleRad);
-                                                                const x2 = 125 + 100 * Math.cos(endAngleRad);
-                                                                const y2 = 125 + 100 * Math.sin(endAngleRad);
+                                                                    const x1 = 125 + 100 * Math.cos(startAngleRad);
+                                                                    const y1 = 125 + 100 * Math.sin(startAngleRad);
+                                                                    const x2 = 125 + 100 * Math.cos(endAngleRad);
+                                                                    const y2 = 125 + 100 * Math.sin(endAngleRad);
 
-                                                                const pathData = [
-                                                                    `M 125 125`,
-                                                                    `L ${x1} ${y1}`,
-                                                                    `A 100 100 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-                                                                    `Z`
-                                                                ].join(' ');
+                                                                    const pathData = [
+                                                                        `M 125 125`,
+                                                                        `L ${x1} ${y1}`,
+                                                                        `A 100 100 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                                                                        `Z`
+                                                                    ].join(' ');
 
-                                                                return (
-                                                                    <path
-                                                                        key={index}
-                                                                        d={pathData}
-                                                                        fill={colors[index % colors.length]}
-                                                                        stroke={theme.palette.background.paper}
-                                                                        strokeWidth="2"
-                                                                    />
-                                                                );
-                                                            });
-                                                        })()}
-                                                    </svg>
-                                                    <Box sx={{
-                                                        position: 'absolute',
-                                                        top: '50%',
-                                                        left: '50%',
-                                                        transform: 'translate(-50%, -50%)',
-                                                        textAlign: 'center'
-                                                    }}>
+                                                                    return (
+                                                                        <path
+                                                                            key={index}
+                                                                            d={pathData}
+                                                                            fill={colors[index % colors.length]}
+                                                                            stroke={theme.palette.background.paper}
+                                                                            strokeWidth="2"
+                                                                        />
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </svg>
+                                                    </Box>
+                                                    <Box sx={{ textAlign: 'center' }}>
                                                         <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
                                                             Total
                                                         </Typography>
@@ -2737,35 +2733,6 @@ export default function Budget() {
                                                             </Box>
                                                         );
                                                     })}
-                                                    {/* Total Row */}
-                                                    <Box sx={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 1,
-                                                        marginTop: 1,
-                                                        paddingTop: 1,
-                                                        borderTop: `1px solid ${theme.palette.secondary.main}`
-                                                    }}>
-                                                        <Box sx={{
-                                                            width: '16px',
-                                                            height: '16px',
-                                                            borderRadius: '4px',
-                                                            bgcolor: 'transparent'
-                                                        }} />
-                                                        <Box sx={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: theme.palette.text.primary }}>
-                                                                Total
-                                                            </Typography>
-                                                            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                                <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
-                                                                    100.0%
-                                                                </Typography>
-                                                                <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
-                                                                    {formatCurrency(insights.totalFunExpenses, currency)}
-                                                                </Typography>
-                                                            </Box>
-                                                        </Box>
-                                                    </Box>
                                                 </Box>
                                             </Box>
                                         </Paper>
