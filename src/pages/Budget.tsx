@@ -691,22 +691,31 @@ export default function Budget() {
 
         // Calculate fun expenses breakdown (filter by month if provided)
         const funExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
-        const funExpensesByItem = funExpenses
-            .filter(item => {
-                if (!selectedMonth || selectedMonth === 'all') return true; // Show all if no month selected or "all" is selected
-                // Check if the expense date falls in the selected month
-                if (!item.staticExpenseDate) return false;
-                const expenseDate = new Date(item.staticExpenseDate);
-                const expenseMonthIndex = expenseDate.getMonth();
-                const selectedMonthIndex = MONTHS.indexOf(selectedMonth);
-                return expenseMonthIndex === selectedMonthIndex;
-            })
+        const filteredFunExpenses = funExpenses.filter(item => {
+            if (!selectedMonth || selectedMonth === 'all') return true; // Show all if no month selected or "all" is selected
+            // Check if the expense date falls in the selected month
+            if (!item.staticExpenseDate) return false;
+            const expenseDate = new Date(item.staticExpenseDate);
+            const expenseMonthIndex = expenseDate.getMonth();
+            const selectedMonthIndex = MONTHS.indexOf(selectedMonth);
+            return expenseMonthIndex === selectedMonthIndex;
+        });
+
+        // Calculate total from all filtered items
+        const totalFunExpenses = filteredFunExpenses.reduce((sum, item) => sum + (item.staticExpensePrice || 0), 0);
+
+        // Map and sort items
+        let funExpensesByItem = filteredFunExpenses
             .map(item => ({
                 name: item.name,
                 amount: item.staticExpensePrice || 0
             }))
             .sort((a, b) => b.amount - a.amount); // Sort by amount descending (highest percentage first)
-        const totalFunExpenses = funExpensesByItem.reduce((sum, item) => sum + item.amount, 0);
+
+        // Limit to top 10 when "all" is selected
+        if (selectedMonth === 'all') {
+            funExpensesByItem = funExpensesByItem.slice(0, 10);
+        }
 
         // Calculate expenses by category
         const expensesByCategory: { [key: string]: number } = {};
