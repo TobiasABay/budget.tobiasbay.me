@@ -1408,29 +1408,64 @@ export default function Budget() {
                     ) : (() => {
                         // Group expenses by month
                         const expensesByMonth: { [key: string]: LineItem[] } = {};
-                        lineItems
-                            .filter(item => item.type === 'expense' && item.isStaticExpense)
-                            .forEach(item => {
-                                if (item.staticExpenseDate) {
+                        const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
+
+                        staticExpenses.forEach(item => {
+                            if (item.staticExpenseDate) {
+                                try {
                                     const date = new Date(item.staticExpenseDate);
-                                    const monthIndex = date.getMonth();
-                                    const monthName = MONTHS[monthIndex];
-                                    if (!expensesByMonth[monthName]) {
-                                        expensesByMonth[monthName] = [];
+                                    if (!isNaN(date.getTime())) {
+                                        const monthIndex = date.getMonth();
+                                        const monthName = MONTHS[monthIndex];
+                                        if (!expensesByMonth[monthName]) {
+                                            expensesByMonth[monthName] = [];
+                                        }
+                                        expensesByMonth[monthName].push(item);
+                                    } else {
+                                        // Invalid date, add to uncategorized
+                                        if (!expensesByMonth['Uncategorized']) {
+                                            expensesByMonth['Uncategorized'] = [];
+                                        }
+                                        expensesByMonth['Uncategorized'].push(item);
                                     }
-                                    expensesByMonth[monthName].push(item);
+                                } catch (e) {
+                                    // Invalid date format, add to uncategorized
+                                    if (!expensesByMonth['Uncategorized']) {
+                                        expensesByMonth['Uncategorized'] = [];
+                                    }
+                                    expensesByMonth['Uncategorized'].push(item);
                                 }
-                            });
+                            } else {
+                                // No date, add to uncategorized
+                                if (!expensesByMonth['Uncategorized']) {
+                                    expensesByMonth['Uncategorized'] = [];
+                                }
+                                expensesByMonth['Uncategorized'].push(item);
+                            }
+                        });
 
                         // Sort months and expenses within each month
                         const sortedMonths = Object.keys(expensesByMonth).sort((a, b) => {
+                            // Put "Uncategorized" at the end
+                            if (a === 'Uncategorized') return 1;
+                            if (b === 'Uncategorized') return -1;
                             const indexA = MONTHS.indexOf(a);
                             const indexB = MONTHS.indexOf(b);
-                            return indexA - indexB;
+                            // If both are valid months, sort by index
+                            if (indexA !== -1 && indexB !== -1) {
+                                return indexA - indexB;
+                            }
+                            // Otherwise maintain order
+                            return 0;
                         });
 
                         sortedMonths.forEach(month => {
                             expensesByMonth[month].sort((a, b) => {
+                                // For uncategorized, sort by name
+                                if (month === 'Uncategorized') {
+                                    return (a.name || '').localeCompare(b.name || '');
+                                }
+                                // For months with dates, sort by date
                                 const dateA = a.staticExpenseDate || '';
                                 const dateB = b.staticExpenseDate || '';
                                 return dateA.localeCompare(dateB);
@@ -1439,13 +1474,14 @@ export default function Budget() {
 
                         return (
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                {sortedMonths.map((month) => {
+                                {sortedMonths.map((month, monthIndex) => {
                                     const monthExpenses = expensesByMonth[month];
                                     const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.staticExpensePrice || 0), 0);
-                                    
+
                                     return (
                                         <Accordion
                                             key={month}
+                                            defaultExpanded={monthIndex === 0}
                                             sx={{
                                                 bgcolor: theme.palette.background.default,
                                                 '&:before': {
@@ -1471,7 +1507,7 @@ export default function Budget() {
                                                     {formatCurrency(monthTotal, currency)}
                                                 </Typography>
                                             </AccordionSummary>
-                                            <AccordionDetails>
+                                            <AccordionDetails sx={{ padding: '1rem', paddingTop: '0.5rem' }}>
                                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                                     {monthExpenses.map((item) => {
                                                         const isEditing = editingStaticExpense === item.id;
@@ -1481,9 +1517,12 @@ export default function Budget() {
                                                                 sx={{
                                                                     bgcolor: theme.palette.background.paper,
                                                                     padding: '1rem',
+                                                                    paddingRight: '0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
                                                                     gap: 2,
+                                                                    overflow: 'visible',
+                                                                    minWidth: 0,
                                                                     '&:hover': {
                                                                         bgcolor: theme.palette.background.default,
                                                                     },
@@ -1542,15 +1581,26 @@ export default function Budget() {
                                                                             onClick={() => {
                                                                                 if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
 
-                                                                                const date = new Date(editStaticExpenseDate);
-                                                                                const monthIndex = date.getMonth();
-                                                                                const monthName = MONTHS[monthIndex];
                                                                                 const price = parseFloat(editStaticExpensePrice) || 0;
+                                                                                let monthName = '';
+
+                                                                                // Validate and parse date
+                                                                                try {
+                                                                                    const date = new Date(editStaticExpenseDate);
+                                                                                    if (!isNaN(date.getTime())) {
+                                                                                        const monthIndex = date.getMonth();
+                                                                                        monthName = MONTHS[monthIndex];
+                                                                                    }
+                                                                                } catch (e) {
+                                                                                    // Invalid date, will be handled as uncategorized
+                                                                                }
 
                                                                                 const updatedItems = lineItems.map(li => {
                                                                                     if (li.id === item.id) {
                                                                                         const newMonths: { [key: string]: number } = {};
-                                                                                        newMonths[monthName] = price;
+                                                                                        if (monthName) {
+                                                                                            newMonths[monthName] = price;
+                                                                                        }
                                                                                         return {
                                                                                             ...li,
                                                                                             name: editStaticExpenseName.trim(),
@@ -1594,40 +1644,42 @@ export default function Budget() {
                                                                     </>
                                                                 ) : (
                                                                     <>
-                                                                        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                                                            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold' }}>
+                                                                        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0, overflow: 'hidden' }}>
+                                                                            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                                                 {item.name}
                                                                             </Typography>
                                                                             <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
                                                                                 {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
                                                                             </Typography>
                                                                         </Box>
-                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right' }}>
+                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right', flexShrink: 0 }}>
                                                                             {formatCurrency(item.staticExpensePrice || 0, currency)}
                                                                         </Typography>
-                                                                        <IconButton
-                                                                            onClick={() => {
-                                                                                setEditingStaticExpense(item.id);
-                                                                                setEditStaticExpenseName(item.name);
-                                                                                setEditStaticExpenseDate(item.staticExpenseDate || '');
-                                                                                setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
-                                                                            }}
-                                                                            size="small"
-                                                                            sx={{
-                                                                                color: theme.palette.primary.main,
-                                                                            }}
-                                                                        >
-                                                                            <EditIcon />
-                                                                        </IconButton>
-                                                                        <IconButton
-                                                                            onClick={() => handleDeleteItem(item.id)}
-                                                                            size="small"
-                                                                            sx={{
-                                                                                color: theme.palette.error.main,
-                                                                            }}
-                                                                        >
-                                                                            <DeleteIcon />
-                                                                        </IconButton>
+                                                                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                                                                            <IconButton
+                                                                                onClick={() => {
+                                                                                    setEditingStaticExpense(item.id);
+                                                                                    setEditStaticExpenseName(item.name);
+                                                                                    setEditStaticExpenseDate(item.staticExpenseDate || '');
+                                                                                    setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
+                                                                                }}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    color: theme.palette.primary.main,
+                                                                                }}
+                                                                            >
+                                                                                <EditIcon />
+                                                                            </IconButton>
+                                                                            <IconButton
+                                                                                onClick={() => handleDeleteItem(item.id)}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    color: theme.palette.error.main,
+                                                                                }}
+                                                                            >
+                                                                                <DeleteIcon />
+                                                                            </IconButton>
+                                                                        </Box>
                                                                     </>
                                                                 )}
                                                             </Paper>
