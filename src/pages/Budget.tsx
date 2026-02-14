@@ -271,16 +271,6 @@ export default function Budget() {
 
             if (response.ok) {
                 const items = await response.json();
-
-                // Debug: Check raw API response
-                const expenseItemsFromAPI = items.filter((item: any) => item.type === 'expense');
-                console.log('🔍 Debug: Raw API response - expense items:', expenseItemsFromAPI.slice(0, 3).map((item: any) => ({
-                    name: item.name,
-                    category: item.category,
-                    hasCategory: 'category' in item,
-                    allKeys: Object.keys(item)
-                })));
-
                 // Ensure items with static expense properties are marked as static expenses
                 // This is a safeguard in case the API didn't set the flag
                 // Also extract formulas from months._formulas if they exist
@@ -300,23 +290,6 @@ export default function Budget() {
                     }
                     return normalizedItem;
                 });
-
-                // Debug: Log items with categories after loading
-                const itemsWithCategories = normalizedItems.filter((item: LineItem) => item.type === 'expense');
-                console.log('🔍 Debug: Loaded items with categories:', itemsWithCategories.map((item: LineItem) => ({
-                    id: item.id,
-                    name: item.name,
-                    category: item.category,
-                    categoryType: typeof item.category,
-                    hasCategory: 'category' in item,
-                    categoryValue: item.category
-                })));
-
-                // Check if any expense has a category
-                const expensesWithCategories = itemsWithCategories.filter((item: LineItem) => item.category);
-                console.log('🔍 Debug: Loaded expenses WITH categories:', expensesWithCategories.length);
-                console.log('🔍 Debug: Loaded expenses WITHOUT categories:', itemsWithCategories.length - expensesWithCategories.length);
-
                 setLineItems(normalizedItems);
             }
         } catch (error) {
@@ -357,51 +330,14 @@ export default function Budget() {
                 return normalizedItem;
             });
 
-            // Debug: Log items with categories to see what we're sending
-            const itemsWithCategories = normalizedItems.filter((item: LineItem) => item.type === 'expense');
-            console.log('🔍 Debug: Saving items with categories:', itemsWithCategories.map((item: LineItem) => ({
-                id: item.id,
-                name: item.name,
-                category: item.category,
-                categoryType: typeof item.category,
-                hasCategory: 'category' in item,
-                categoryValue: item.category
-            })));
-
-            // Check if any expense has a category
-            const expensesWithCategories = itemsWithCategories.filter((item: LineItem) => item.category);
-            console.log('🔍 Debug: Expenses WITH categories:', expensesWithCategories.length);
-            console.log('🔍 Debug: Expenses WITHOUT categories:', itemsWithCategories.length - expensesWithCategories.length);
-
             const encodedYear = encodeURIComponent(year);
-            const requestBody = JSON.stringify({ items: normalizedItems });
-
-            // Check if category field exists in JSON string
-            const hasCategoryInJson = requestBody.includes('"category"');
-            console.log('🔍 Debug: Does JSON contain "category" field?', hasCategoryInJson);
-
-            // Find expenses with categories in the JSON to check
-            const expensesWithCategoryInJson = normalizedItems.filter((item: LineItem) =>
-                item.type === 'expense' && item.category
-            );
-            if (expensesWithCategoryInJson.length > 0) {
-                console.log('🔍 Debug: Expenses WITH categories being sent:', expensesWithCategoryInJson.map((item: LineItem) => ({
-                    name: item.name,
-                    category: item.category
-                })));
-                // Show full JSON for one expense with category
-                const sampleItem = expensesWithCategoryInJson[0];
-                const sampleJson = JSON.stringify(sampleItem);
-                console.log('🔍 Debug: Full JSON for expense with category:', sampleJson);
-            }
-
             const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-User-Id': user.id,
                 },
-                body: requestBody,
+                body: JSON.stringify({ items: normalizedItems }),
             });
 
             if (!response.ok) {
@@ -767,7 +703,8 @@ export default function Budget() {
             .map(item => ({
                 name: item.name,
                 amount: item.staticExpensePrice || 0
-            }));
+            }))
+            .sort((a, b) => b.amount - a.amount); // Sort by amount descending (highest percentage first)
         const totalFunExpenses = funExpensesByItem.reduce((sum, item) => sum + item.amount, 0);
 
         // Calculate expenses by category
@@ -1000,10 +937,11 @@ export default function Budget() {
                                                 color: '#4caf50', // Bright green for income
                                                 fontWeight: 700,
                                                 borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: isMobile ? '8px 4px' : '12px 8px',
+                                                padding: isMobile ? '6px 2px' : '12px 8px',
                                                 cursor: 'pointer',
-                                                fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                fontSize: isMobile ? '0.7rem' : '0.875rem',
                                                 bgcolor: theme.palette.background.paper,
+                                                maxWidth: isMobile ? '120px' : 'none',
                                                 ...(isMobile && {
                                                     position: 'sticky',
                                                     left: 0,
@@ -1014,7 +952,7 @@ export default function Budget() {
                                                 },
                                             }}
                                         >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1 }}>
                                                 {selectedItemForDelete === item.id && item.type === 'income' && (
                                                     <DragIndicatorIcon
                                                         sx={{
@@ -1190,10 +1128,11 @@ export default function Budget() {
                                                     color: item.linkedLoanId ? theme.palette.info.main : '#f44336', // Bright red for expenses
                                                     fontWeight: 700,
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                    padding: isMobile ? '8px 4px' : '12px 8px',
+                                                    padding: isMobile ? '6px 2px' : '12px 8px',
                                                     cursor: 'pointer',
-                                                    fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                    fontSize: isMobile ? '0.7rem' : '0.875rem',
                                                     bgcolor: theme.palette.background.paper,
+                                                    maxWidth: isMobile ? '120px' : 'none',
                                                     ...(isMobile && {
                                                         position: 'sticky',
                                                         left: 0,
@@ -1204,13 +1143,14 @@ export default function Budget() {
                                                     },
                                                 }}
                                             >
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1, minWidth: 0, width: '100%' }}>
                                                     {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
                                                         <DragIndicatorIcon
                                                             sx={{
                                                                 color: theme.palette.text.secondary,
                                                                 fontSize: '1.2rem',
                                                                 cursor: 'grab',
+                                                                flexShrink: 0,
                                                                 '&:active': {
                                                                     cursor: 'grabbing',
                                                                 },
@@ -1222,14 +1162,15 @@ export default function Budget() {
                                                             sx={{
                                                                 fontSize: '1rem',
                                                                 color: theme.palette.info.main,
-                                                                opacity: 0.8
+                                                                opacity: 0.8,
+                                                                flexShrink: 0
                                                             }}
                                                         />
                                                     )}
-                                                    <span style={{ flex: 1 }}>
+                                                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {item.name}
                                                     </span>
-                                                    {item.category && (
+                                                    {item.category && !isMobile && (
                                                         <Chip
                                                             label={item.category}
                                                             size="small"
@@ -1238,6 +1179,8 @@ export default function Budget() {
                                                                 height: '24px',
                                                                 bgcolor: theme.palette.background.default,
                                                                 color: theme.palette.text.primary,
+                                                                flexShrink: 0,
+                                                                maxWidth: '100%',
                                                             }}
                                                         />
                                                     )}
@@ -2004,7 +1947,7 @@ export default function Budget() {
                                                                     paddingRight: '0.5rem',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
-                                                                    gap: 2,
+                                                                    gap: isMobile ? 1 : 2,
                                                                     overflow: 'visible',
                                                                     minWidth: 0,
                                                                     '&:hover': {
@@ -2128,15 +2071,15 @@ export default function Budget() {
                                                                     </>
                                                                 ) : (
                                                                     <>
-                                                                        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0, overflow: 'hidden' }}>
-                                                                            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0, overflow: 'hidden', maxWidth: 'calc(100% - 120px)' }}>
+                                                                            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
                                                                                 {item.name}
                                                                             </Typography>
                                                                             <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
                                                                                 {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
                                                                             </Typography>
                                                                         </Box>
-                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: '100px', textAlign: 'right', flexShrink: 0 }}>
+                                                                        <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: isMobile ? '60px' : '80px', textAlign: 'right', flexShrink: 0 }}>
                                                                             {formatCurrency(item.staticExpensePrice || 0, currency)}
                                                                         </Typography>
                                                                         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>

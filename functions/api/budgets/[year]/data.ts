@@ -138,14 +138,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category FROM budget_items WHERE user_id = ? AND year = ?')
           .bind(userId, year)
           .all();
-        console.log('🔍 Backend Debug: Successfully selected with category column, got', result.results.length, 'items');
       } catch (e: any) {
         // If columns don't exist, try with fewer columns
         const errorMsg = e?.message || String(e);
-        console.log('🔍 Backend Debug: SELECT query error:', errorMsg);
-        usedFallback = true;
         if (errorMsg.includes('no such column: category')) {
-          console.log('🔍 Backend Debug: Category column not found, trying without it');
           try {
             result = await env.budget_db
               .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id FROM budget_items WHERE user_id = ? AND year = ?')
@@ -277,25 +273,10 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             // Explicitly set to null if column exists but value is null
             item.category = null;
           }
-        } else {
-          // Category column not in result (fallback query was used)
-          console.log('🔍 Backend Debug: Category column not in row for item:', item.name);
         }
 
         return item;
       });
-
-      // Debug: Log items with categories
-      const expenseItems = items.filter(item => item.type === 'expense');
-      const itemsWithCategories = expenseItems.filter(item => item.category);
-      console.log('🔍 Backend Debug: Returning', itemsWithCategories.length, 'expenses with categories out of', expenseItems.length, 'total expenses');
-      if (expenseItems.length > 0) {
-        console.log('🔍 Backend Debug: Sample expense:', {
-          name: expenseItems[0].name,
-          hasCategory: 'category' in expenseItems[0],
-          category: expenseItems[0].category
-        });
-      }
 
       return new Response(JSON.stringify(items), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
