@@ -154,27 +154,31 @@ export const onRequest: PagesFunction<Env> = async (context) => {
           } catch (e2: any) {
             const errorMsg2 = e2?.message || String(e2);
             if (errorMsg2.includes('no such column: linked_loan_id')) {
-          try {
-            result = await env.budget_db
-              .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
-              .bind(userId, year)
-              .all();
-          } catch (e2: any) {
-            const errorMsg2 = e2?.message || String(e2);
-            if (errorMsg2.includes('no such column: static_expense_data')) {
               try {
                 result = await env.budget_db
-                  .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+                  .prepare('SELECT item_id, name, type, frequency, months, loan_data, static_expense_data FROM budget_items WHERE user_id = ? AND year = ?')
                   .bind(userId, year)
                   .all();
               } catch (e3: any) {
                 const errorMsg3 = e3?.message || String(e3);
-                if (errorMsg3.includes('no such column: loan_data')) {
-                  console.log('loan_data column not found, using fallback query');
-                  result = await env.budget_db
-                    .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
-                    .bind(userId, year)
-                    .all();
+                if (errorMsg3.includes('no such column: static_expense_data')) {
+                  try {
+                    result = await env.budget_db
+                      .prepare('SELECT item_id, name, type, frequency, months, loan_data FROM budget_items WHERE user_id = ? AND year = ?')
+                      .bind(userId, year)
+                      .all();
+                  } catch (e4: any) {
+                    const errorMsg4 = e4?.message || String(e4);
+                    if (errorMsg4.includes('no such column: loan_data')) {
+                      console.log('loan_data column not found, using fallback query');
+                      result = await env.budget_db
+                        .prepare('SELECT item_id, name, type, frequency, months FROM budget_items WHERE user_id = ? AND year = ?')
+                        .bind(userId, year)
+                        .all();
+                    } else {
+                      throw e4;
+                    }
+                  }
                 } else {
                   throw e3;
                 }
