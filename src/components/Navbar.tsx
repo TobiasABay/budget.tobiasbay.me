@@ -51,9 +51,10 @@ export default function Navbar() {
 
   const menuItems = [
     { text: 'Loans', icon: <PaymentsIcon />, path: '/loans' },
-    { text: 'Salary', icon: <RequestQuoteIcon />, path: '/salary' },
-    { text: 'Insurance', icon: <AssignmentIndIcon />, path: '/insurance' },
-    { text: 'Stocks', icon: <TrendingUpIcon />, path: '/stocks' },
+    // Temporarily hidden - not deleted
+    // { text: 'Salary', icon: <RequestQuoteIcon />, path: '/salary' },
+    // { text: 'Insurance', icon: <AssignmentIndIcon />, path: '/insurance' },
+    // { text: 'Stocks', icon: <TrendingUpIcon />, path: '/stocks' },
   ];
 
   useEffect(() => {
