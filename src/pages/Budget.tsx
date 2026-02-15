@@ -76,6 +76,7 @@ export default function Budget() {
     const muiTheme = useTheme();
     const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
     const isTablet = useMediaQuery(muiTheme.breakpoints.down('md'));
+    const isDesktop = useMediaQuery(muiTheme.breakpoints.up('lg'));
 
     // Helper function to check if an item is Nordnet
     const isNordnetItem = (item: LineItem): boolean => {
@@ -2595,66 +2596,186 @@ export default function Budget() {
                                         </Paper>
                                     </Box>
 
-                                    {/* Monthly Chart */}
-                                    <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                        <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary }}>
+                                    {/* Monthly Column Chart */}
+                                    <Paper sx={{ p: isMobile ? 1.5 : isTablet ? 1.75 : 2, bgcolor: theme.palette.background.default }}>
+                                        <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary, fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem' }}>
                                             Monthly Overview
                                         </Typography>
-                                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                            {insights.monthlyData.map((data) => {
-                                                const incomePercent = (data.income / maxValue) * 100;
-                                                const expensePercent = (data.expense / maxValue) * 100;
+                                        <Box sx={{
+                                            overflowX: 'auto',
+                                            overflowY: 'visible',
+                                            '&::-webkit-scrollbar': {
+                                                height: '6px',
+                                            },
+                                            '&::-webkit-scrollbar-track': {
+                                                background: theme.palette.background.default,
+                                            },
+                                            '&::-webkit-scrollbar-thumb': {
+                                                background: theme.palette.secondary.main,
+                                                borderRadius: '3px',
+                                            },
+                                        }}>
+                                            <Box sx={{
+                                                display: 'flex',
+                                                alignItems: 'flex-end',
+                                                gap: isMobile ? 0.5 : isDesktop ? 1 : 0.5,
+                                                height: isMobile ? '220px' : isDesktop ? '300px' : '220px',
+                                                px: isMobile ? 0.5 : isDesktop ? 1 : 0.5,
+                                                mb: 2,
+                                                minWidth: isMobile ? '600px' : isDesktop ? 'auto' : '600px'
+                                            }}>
+                                                {insights.monthlyData.map((data) => {
+                                                    const incomeHeight = (data.income / maxValue) * 100;
+                                                    const expenseHeight = (data.expense / maxValue) * 100;
+                                                    const savings = data.income - data.expense;
 
-                                                return (
-                                                    <Box key={data.month} sx={{ mb: 2 }}>
-                                                        <Typography sx={{ fontSize: '0.875rem', mb: 0.5, color: theme.palette.text.primary }}>
-                                                            {data.month}
-                                                        </Typography>
-                                                        <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.5, mb: 0.5 }}>
+                                                    return (
+                                                        <Box key={data.month} sx={{
+                                                            flex: 1,
+                                                            display: 'flex',
+                                                            flexDirection: 'column',
+                                                            alignItems: 'center',
+                                                            height: '100%',
+                                                            justifyContent: 'flex-end',
+                                                            gap: isMobile ? 0.25 : isDesktop ? 0.5 : 0.25,
+                                                            minWidth: isMobile ? '40px' : isDesktop ? 'auto' : '40px'
+                                                        }}>
                                                             <Box sx={{
-                                                                flex: incomePercent / 100,
-                                                                height: '20px',
-                                                                bgcolor: '#4caf50',
-                                                                borderRadius: '4px 4px 0 0',
-                                                                minWidth: '2px'
-                                                            }} />
-                                                            <Box sx={{
-                                                                flex: expensePercent / 100,
-                                                                height: '20px',
-                                                                bgcolor: '#f44336',
-                                                                borderRadius: '4px 4px 0 0',
-                                                                minWidth: '2px'
-                                                            }} />
-                                                        </Box>
-                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: theme.palette.text.secondary }}>
-                                                            <span>Income: {formatCurrency(data.income, currency)}</span>
-                                                            <span>Expense: {formatCurrency(data.expense, currency)}</span>
-                                                            <span style={{
-                                                                color: data.savings >= 0 ? '#4caf50' : '#f44336',
-                                                                fontWeight: 'bold'
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'center',
+                                                                width: '100%',
+                                                                height: '100%',
+                                                                justifyContent: 'flex-end',
+                                                                gap: isMobile ? 0.25 : isDesktop ? 0.5 : 0.25,
+                                                                position: 'relative'
                                                             }}>
-                                                                Savings: {formatCurrency(data.savings, currency)}
-                                                            </span>
+                                                                {/* Income Column */}
+                                                                <Box sx={{
+                                                                    width: '100%',
+                                                                    height: `${incomeHeight}%`,
+                                                                    bgcolor: '#4caf50',
+                                                                    borderRadius: '4px 4px 0 0',
+                                                                    minHeight: incomeHeight > 0 ? '2px' : '0',
+                                                                    display: 'flex',
+                                                                    alignItems: 'flex-end',
+                                                                    justifyContent: 'center',
+                                                                    position: 'relative',
+                                                                    '&:hover': {
+                                                                        opacity: 0.8,
+                                                                    }
+                                                                }} />
+                                                                {/* Expense Column */}
+                                                                <Box sx={{
+                                                                    width: '100%',
+                                                                    height: `${expenseHeight}%`,
+                                                                    bgcolor: '#f44336',
+                                                                    borderRadius: '4px 4px 0 0',
+                                                                    minHeight: expenseHeight > 0 ? '2px' : '0',
+                                                                    display: 'flex',
+                                                                    alignItems: 'flex-end',
+                                                                    justifyContent: 'center',
+                                                                    position: 'relative',
+                                                                    '&:hover': {
+                                                                        opacity: 0.8,
+                                                                    }
+                                                                }} />
+                                                            </Box>
+                                                            {/* Month Label */}
+                                                            <Typography sx={{
+                                                                fontSize: isMobile ? '0.65rem' : isDesktop ? '0.7rem' : '0.65rem',
+                                                                color: theme.palette.text.secondary,
+                                                                textAlign: 'center',
+                                                                mt: 0.5,
+                                                                fontWeight: isMobile ? 500 : isDesktop ? 400 : 500
+                                                            }}>
+                                                                {data.month.substring(0, 3)}
+                                                            </Typography>
+                                                            {/* Value Labels - Always shown below columns */}
+                                                            <Box sx={{
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'center',
+                                                                gap: isMobile ? 0.25 : 0.3,
+                                                                mt: 0.5,
+                                                                width: '100%'
+                                                            }}>
+                                                                <Typography sx={{
+                                                                    fontSize: isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
+                                                                    color: '#4caf50',
+                                                                    fontWeight: 'bold',
+                                                                    textAlign: 'center',
+                                                                    lineHeight: 1.2
+                                                                }}>
+                                                                    {formatCurrency(data.income, currency).replace(/\s/g, '')}
+                                                                </Typography>
+                                                                <Typography sx={{
+                                                                    fontSize: isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
+                                                                    color: '#f44336',
+                                                                    fontWeight: 'bold',
+                                                                    textAlign: 'center',
+                                                                    lineHeight: 1.2
+                                                                }}>
+                                                                    {formatCurrency(data.expense, currency).replace(/\s/g, '')}
+                                                                </Typography>
+                                                                <Typography sx={{
+                                                                    fontSize: isMobile ? '0.55rem' : isDesktop ? '0.65rem' : '0.6rem',
+                                                                    color: savings >= 0 ? '#4caf50' : '#f44336',
+                                                                    fontWeight: 'bold',
+                                                                    textAlign: 'center',
+                                                                    lineHeight: 1.2,
+                                                                    mt: 0.25
+                                                                }}>
+                                                                    {formatCurrency(savings, currency).replace(/\s/g, '')}
+                                                                </Typography>
+                                                            </Box>
                                                         </Box>
-                                                    </Box>
-                                                );
-                                            })}
+                                                    );
+                                                })}
+                                            </Box>
+                                        </Box>
+                                        {/* Legend */}
+                                        <Box sx={{ display: 'flex', justifyContent: 'center', gap: isMobile ? 2 : isTablet ? 2.5 : 3, mt: 2, flexWrap: 'wrap' }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box sx={{ width: isMobile ? '12px' : isTablet ? '14px' : '16px', height: isMobile ? '12px' : isTablet ? '14px' : '16px', bgcolor: '#4caf50', borderRadius: '4px' }} />
+                                                <Typography sx={{ fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem', color: theme.palette.text.primary }}>
+                                                    Income
+                                                </Typography>
+                                            </Box>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                <Box sx={{ width: isMobile ? '12px' : isTablet ? '14px' : '16px', height: isMobile ? '12px' : isTablet ? '14px' : '16px', bgcolor: '#f44336', borderRadius: '4px' }} />
+                                                <Typography sx={{ fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem', color: theme.palette.text.primary }}>
+                                                    Expense
+                                                </Typography>
+                                            </Box>
                                         </Box>
                                     </Paper>
 
                                     {/* Fun Expenses Pie Chart */}
                                     {insights.totalFunExpenses > 0 && (
-                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                                <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+                                        <Paper sx={{ p: isMobile ? 1.5 : isTablet ? 1.75 : 2, bgcolor: theme.palette.background.default }}>
+                                            <Box sx={{
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: (isMobile || isTablet) ? 'flex-start' : 'center',
+                                                mb: 2,
+                                                flexDirection: (isMobile || isTablet) ? 'column' : 'row',
+                                                gap: (isMobile || isTablet) ? 1 : 0
+                                            }}>
+                                                <Typography variant="h6" sx={{
+                                                    color: theme.palette.text.primary,
+                                                    fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem',
+                                                    mb: (isMobile || isTablet) ? 1 : 0
+                                                }}>
                                                     Fun Expenses Breakdown
                                                 </Typography>
-                                                <FormControl size="small" sx={{ minWidth: 150 }}>
+                                                <FormControl size="small" sx={{ minWidth: (isMobile || isTablet) ? '100%' : 150 }}>
                                                     <Select
                                                         value={selectedMonthForChart}
                                                         onChange={(e) => setSelectedMonthForChart(e.target.value)}
                                                         sx={{
                                                             color: theme.palette.text.primary,
+                                                            fontSize: isMobile ? '0.875rem' : isTablet ? '0.9rem' : '1rem',
                                                             '& .MuiOutlinedInput-notchedOutline': {
                                                                 borderColor: theme.palette.secondary.main,
                                                             },
@@ -2683,11 +2804,22 @@ export default function Budget() {
                                                     </Select>
                                                 </FormControl>
                                             </Box>
-                                            <Box sx={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 3, alignItems: 'center' }}>
+                                            <Box sx={{ display: 'flex', flexDirection: (isMobile || isTablet) ? 'column' : 'row', gap: isMobile ? 2 : isTablet ? 2.5 : 3, alignItems: 'center' }}>
                                                 {/* Pie Chart */}
-                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                                    <Box sx={{ width: isMobile ? '100%' : '250px', height: '250px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                                                        <svg width="250" height="250" viewBox="0 0 250 250" style={{ transform: 'rotate(-90deg)' }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, width: (isMobile || isTablet) ? '100%' : 'auto' }}>
+                                                    <Box sx={{
+                                                        width: isMobile ? '200px' : isTablet ? '220px' : '250px',
+                                                        height: isMobile ? '200px' : isTablet ? '220px' : '250px',
+                                                        display: 'flex',
+                                                        justifyContent: 'center',
+                                                        alignItems: 'center'
+                                                    }}>
+                                                        <svg
+                                                            width={isMobile ? "200" : isTablet ? "220" : "250"}
+                                                            height={isMobile ? "200" : isTablet ? "220" : "250"}
+                                                            viewBox="0 0 250 250"
+                                                            style={{ transform: 'rotate(-90deg)', maxWidth: '100%', height: 'auto' }}
+                                                        >
                                                             {(() => {
                                                                 let currentAngle = 0;
                                                                 const colors = [
@@ -2733,7 +2865,7 @@ export default function Budget() {
                                                                             d={pathData}
                                                                             fill={colors[index % colors.length]}
                                                                             stroke={theme.palette.background.paper}
-                                                                            strokeWidth="2"
+                                                                            strokeWidth={isMobile ? "1.5" : isTablet ? "1.75" : "2"}
                                                                         />
                                                                     );
                                                                 });
@@ -2741,17 +2873,35 @@ export default function Budget() {
                                                         </svg>
                                                     </Box>
                                                     <Box sx={{ textAlign: 'center' }}>
-                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                        <Typography sx={{ fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem', color: theme.palette.text.secondary }}>
                                                             Total
                                                         </Typography>
-                                                        <Typography sx={{ fontSize: '1.25rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
+                                                        <Typography sx={{ fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
                                                             {formatCurrency(insights.totalFunExpenses, currency)}
                                                         </Typography>
                                                     </Box>
                                                 </Box>
 
                                                 {/* Legend */}
-                                                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                                <Box sx={{
+                                                    flex: 1,
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: isMobile ? 0.75 : isTablet ? 0.85 : 1,
+                                                    width: (isMobile || isTablet) ? '100%' : 'auto',
+                                                    maxHeight: (isMobile || isTablet) ? '300px' : 'none',
+                                                    overflowY: (isMobile || isTablet) ? 'auto' : 'visible',
+                                                    '&::-webkit-scrollbar': {
+                                                        width: '6px',
+                                                    },
+                                                    '&::-webkit-scrollbar-track': {
+                                                        background: theme.palette.background.default,
+                                                    },
+                                                    '&::-webkit-scrollbar-thumb': {
+                                                        background: theme.palette.secondary.main,
+                                                        borderRadius: '3px',
+                                                    },
+                                                }}>
                                                     {insights.funExpensesByItem.map((item, index) => {
                                                         const percentage = (item.amount / insights.totalFunExpenses) * 100;
                                                         const colors = [
@@ -2769,22 +2919,57 @@ export default function Budget() {
                                                             '#009688'  // Teal
                                                         ];
                                                         return (
-                                                            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                            <Box key={index} sx={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: isMobile ? 0.75 : isTablet ? 0.85 : 1,
+                                                                minHeight: (isMobile || isTablet) ? '32px' : 'auto'
+                                                            }}>
                                                                 <Box sx={{
-                                                                    width: '16px',
-                                                                    height: '16px',
+                                                                    width: isMobile ? '12px' : isTablet ? '14px' : '16px',
+                                                                    height: isMobile ? '12px' : isTablet ? '14px' : '16px',
                                                                     borderRadius: '4px',
-                                                                    bgcolor: colors[index % colors.length]
+                                                                    bgcolor: colors[index % colors.length],
+                                                                    flexShrink: 0
                                                                 }} />
-                                                                <Box sx={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.primary }}>
+                                                                <Box sx={{
+                                                                    flex: 1,
+                                                                    display: 'flex',
+                                                                    justifyContent: 'space-between',
+                                                                    alignItems: 'center',
+                                                                    gap: isMobile ? 0.5 : isTablet ? 0.75 : 1,
+                                                                    minWidth: 0
+                                                                }}>
+                                                                    <Typography sx={{
+                                                                        fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem',
+                                                                        color: theme.palette.text.primary,
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                        whiteSpace: 'nowrap',
+                                                                        flex: 1,
+                                                                        minWidth: 0
+                                                                    }}>
                                                                         {item.name}
                                                                     </Typography>
-                                                                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                                    <Box sx={{
+                                                                        display: 'flex',
+                                                                        gap: isMobile ? 0.5 : isTablet ? 0.75 : 1,
+                                                                        alignItems: 'center',
+                                                                        flexShrink: 0
+                                                                    }}>
+                                                                        <Typography sx={{
+                                                                            fontSize: isMobile ? '0.7rem' : isTablet ? '0.75rem' : '0.875rem',
+                                                                            color: theme.palette.text.secondary,
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}>
                                                                             {percentage.toFixed(1)}%
                                                                         </Typography>
-                                                                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
+                                                                        <Typography sx={{
+                                                                            fontSize: isMobile ? '0.7rem' : isTablet ? '0.75rem' : '0.875rem',
+                                                                            fontWeight: 'bold',
+                                                                            color: theme.palette.warning.main,
+                                                                            whiteSpace: 'nowrap'
+                                                                        }}>
                                                                             {formatCurrency(item.amount, currency)}
                                                                         </Typography>
                                                                     </Box>
