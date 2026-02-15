@@ -1200,7 +1200,7 @@ export default function Budget() {
                                                     <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                         {item.name}
                                                     </span>
-                                                    {item.category && !isTablet && (
+                                                    {item.category && isDesktop && (
                                                         <Chip
                                                             label={item.category}
                                                             size="small"
