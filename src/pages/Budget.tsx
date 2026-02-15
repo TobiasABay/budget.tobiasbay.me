@@ -14,6 +14,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import InsightsIcon from '@mui/icons-material/Insights';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import CloseIcon from '@mui/icons-material/Close';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -2166,8 +2167,20 @@ export default function Budget() {
                         }
                     }}
                 >
-                    <DialogTitle sx={{ color: theme.palette.text.primary, fontSize: isMobile ? '1.1rem' : '1.25rem' }}>
-                        {selectedType === 'loan' ? 'Create New Loan' : selectedType === 'staticExpense' ? 'Create New Static Expense' : selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}
+                    <DialogTitle sx={{ color: theme.palette.text.primary, fontSize: isMobile ? '1.1rem' : '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{selectedType === 'loan' ? 'Create New Loan' : selectedType === 'staticExpense' ? 'Create New Static Expense' : selectedType ? `Create New ${selectedType === 'income' ? 'Income' : 'Expense'}` : 'Create New Line Item'}</span>
+                        <IconButton
+                            onClick={handleCloseModal}
+                            size="small"
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': {
+                                    bgcolor: theme.palette.background.default,
+                                },
+                            }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: isMobile ? 'auto' : '300px', marginTop: isMobile ? '0.5rem' : '1rem' }}>
@@ -2456,17 +2469,6 @@ export default function Budget() {
                     </DialogContent>
                     <DialogActions>
                         <Button
-                            onClick={handleCloseModal}
-                            sx={{
-                                color: theme.palette.text.secondary,
-                                '&:hover': {
-                                    bgcolor: theme.palette.background.default,
-                                },
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
                             onClick={handleCreateItem}
                             disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : isStaticExpense ? (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) : (!selectedType || !itemName.trim() || (selectedType === 'expense' && !expenseCategory))}
                             variant="contained"
@@ -2519,9 +2521,23 @@ export default function Budget() {
                         }
                     }}
                 >
-                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <BarChartIcon sx={{ color: theme.palette.info.main }} />
-                        <Typography variant="h6">Budget Insights - {year}</Typography>
+                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <BarChartIcon sx={{ color: theme.palette.info.main }} />
+                            <Typography variant="h6">Budget Insights - {year}</Typography>
+                        </Box>
+                        <IconButton
+                            onClick={() => setInsightsModalOpen(false)}
+                            size="small"
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': {
+                                    bgcolor: theme.palette.background.default,
+                                },
+                            }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
                     </DialogTitle>
                     <DialogContent>
                         {(() => {
@@ -2674,7 +2690,20 @@ export default function Budget() {
                                                         <svg width="250" height="250" viewBox="0 0 250 250" style={{ transform: 'rotate(-90deg)' }}>
                                                             {(() => {
                                                                 let currentAngle = 0;
-                                                                const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
+                                                                const colors = [
+                                                                    '#2196F3', // Blue
+                                                                    '#4CAF50', // Green
+                                                                    '#FF9800', // Orange
+                                                                    '#9C27B0', // Purple
+                                                                    '#F44336', // Red
+                                                                    '#00BCD4', // Cyan
+                                                                    '#FF5722', // Deep Orange
+                                                                    '#8BC34A', // Light Green
+                                                                    '#E91E63', // Pink
+                                                                    '#3F51B5', // Indigo
+                                                                    '#FFC107', // Amber
+                                                                    '#009688'  // Teal
+                                                                ];
                                                                 return insights.funExpensesByItem.map((item, index) => {
                                                                     const percentage = (item.amount / insights.totalFunExpenses) * 100;
                                                                     const angle = (percentage / 100) * 360;
@@ -2725,7 +2754,20 @@ export default function Budget() {
                                                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
                                                     {insights.funExpensesByItem.map((item, index) => {
                                                         const percentage = (item.amount / insights.totalFunExpenses) * 100;
-                                                        const colors = ['#ff9800', '#ff5722', '#ffc107', '#ff6f00', '#ff8f00', '#ffa726', '#ffb74d', '#ffcc80'];
+                                                        const colors = [
+                                                            '#2196F3', // Blue
+                                                            '#4CAF50', // Green
+                                                            '#FF9800', // Orange
+                                                            '#9C27B0', // Purple
+                                                            '#F44336', // Red
+                                                            '#00BCD4', // Cyan
+                                                            '#FF5722', // Deep Orange
+                                                            '#8BC34A', // Light Green
+                                                            '#E91E63', // Pink
+                                                            '#3F51B5', // Indigo
+                                                            '#FFC107', // Amber
+                                                            '#009688'  // Teal
+                                                        ];
                                                         return (
                                                             <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                                 <Box sx={{
@@ -2876,16 +2918,6 @@ export default function Budget() {
                             );
                         })()}
                     </DialogContent>
-                    <DialogActions>
-                        <Button
-                            onClick={() => setInsightsModalOpen(false)}
-                            sx={{
-                                color: theme.palette.text.secondary,
-                            }}
-                        >
-                            Close
-                        </Button>
-                    </DialogActions>
                 </Dialog>
 
                 {/* Edit Expense Modal */}
@@ -2902,9 +2934,23 @@ export default function Budget() {
                         }
                     }}
                 >
-                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <EditIcon sx={{ color: theme.palette.primary.main }} />
-                        <Typography variant="h6">Edit Expense</Typography>
+                    <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <EditIcon sx={{ color: theme.palette.primary.main }} />
+                            <Typography variant="h6">Edit Expense</Typography>
+                        </Box>
+                        <IconButton
+                            onClick={handleCloseEditExpenseModal}
+                            size="small"
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': {
+                                    bgcolor: theme.palette.background.default,
+                                },
+                            }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
                     </DialogTitle>
                     <DialogContent>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
@@ -2982,17 +3028,6 @@ export default function Budget() {
                         </Box>
                     </DialogContent>
                     <DialogActions>
-                        <Button
-                            onClick={handleCloseEditExpenseModal}
-                            sx={{
-                                color: theme.palette.text.secondary,
-                                '&:hover': {
-                                    bgcolor: theme.palette.background.default,
-                                },
-                            }}
-                        >
-                            Cancel
-                        </Button>
                         <Button
                             onClick={handleSaveExpenseEdit}
                             disabled={!editExpenseName.trim()}
