@@ -11,6 +11,9 @@ import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import FolderIcon from '@mui/icons-material/Folder';
 import CreditCardIcon from '@mui/icons-material/CreditCard';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import DownloadIcon from '@mui/icons-material/Download';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import * as XLSX from 'xlsx';
 import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -168,6 +171,8 @@ export default function SettingsPage() {
   const [stockYearDeleteDialogOpen, setStockYearDeleteDialogOpen] = useState<boolean>(false);
   const [stockYearToDelete, setStockYearToDelete] = useState<string | null>(null);
   const [activeBudget, setActiveBudget] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<boolean>(false);
+  const [downloadingExcel, setDownloadingExcel] = useState<boolean>(false);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -388,6 +393,298 @@ export default function SettingsPage() {
 
     setStockYearDeleteDialogOpen(false);
     setStockYearToDelete(null);
+  };
+
+  const handleDownloadAllData = async () => {
+    if (!user?.id) return;
+    
+    setDownloading(true);
+    setError('');
+    
+    try {
+      // Fetch all budgets
+      const budgetsList = await fetchBudgets(user.id);
+      
+      // Fetch budget items for each budget year
+      const budgetDataMap: { [year: string]: any[] } = {};
+      for (const year of budgetsList) {
+        const encodedYear = encodeURIComponent(year);
+        try {
+          const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-User-Id': user.id,
+            },
+          });
+          if (response.ok) {
+            const items = await response.json();
+            budgetDataMap[year] = items;
+          }
+        } catch (err) {
+          console.error(`Error fetching budget data for ${year}:`, err);
+          budgetDataMap[year] = [];
+        }
+      }
+      
+      // Fetch loans
+      let loansData: Loan[] = [];
+      try {
+        loansData = await fetchLoans(user.id);
+      } catch (err) {
+        console.error('Error fetching loans:', err);
+      }
+      
+      // Fetch subscriptions (if available)
+      let subscriptionsData: any[] = [];
+      try {
+        const subscriptionsResponse = await fetch(`${API_BASE_URL}/subscriptions`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': user.id,
+          },
+        });
+        if (subscriptionsResponse.ok) {
+          subscriptionsData = await subscriptionsResponse.json();
+        }
+      } catch (err) {
+        console.error('Error fetching subscriptions:', err);
+      }
+      
+      // Get stocks data from localStorage
+      const stocksYears = localStorage.getItem('stocks_years');
+      const stocksData = localStorage.getItem('stocks_data');
+      
+      // Get other localStorage data
+      const activeBudget = localStorage.getItem('activeBudget');
+      const currency = localStorage.getItem('budget_currency');
+      
+      // Combine all data
+      const exportData = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        budgets: budgetsList,
+        budgetItems: budgetDataMap,
+        loans: loansData,
+        subscriptions: subscriptionsData,
+        stocks: {
+          years: stocksYears ? JSON.parse(stocksYears) : [],
+          data: stocksData ? JSON.parse(stocksData) : [],
+        },
+        preferences: {
+          activeBudget: activeBudget,
+          currency: currency,
+        },
+      };
+      
+      // Create and download JSON file
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      a.download = `budget-export-${timestamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setError('');
+    } catch (err) {
+      console.error('Error downloading data:', err);
+      setError('Failed to download data. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!user?.id) return;
+    
+    setDownloadingExcel(true);
+    setError('');
+    
+    try {
+      // Fetch all budgets
+      const budgetsList = await fetchBudgets(user.id);
+      
+      // Fetch budget items for each budget year
+      const budgetDataMap: { [year: string]: any[] } = {};
+      for (const year of budgetsList) {
+        const encodedYear = encodeURIComponent(year);
+        try {
+          const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-User-Id': user.id,
+            },
+          });
+          if (response.ok) {
+            const items = await response.json();
+            budgetDataMap[year] = items;
+          }
+        } catch (err) {
+          console.error(`Error fetching budget data for ${year}:`, err);
+          budgetDataMap[year] = [];
+        }
+      }
+      
+      // Fetch loans
+      let loansData: Loan[] = [];
+      try {
+        loansData = await fetchLoans(user.id);
+      } catch (err) {
+        console.error('Error fetching loans:', err);
+      }
+      
+      // Fetch subscriptions (if available)
+      let subscriptionsData: any[] = [];
+      try {
+        const subscriptionsResponse = await fetch(`${API_BASE_URL}/subscriptions`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-Id': user.id,
+          },
+        });
+        if (subscriptionsResponse.ok) {
+          subscriptionsData = await subscriptionsResponse.json();
+        }
+      } catch (err) {
+        console.error('Error fetching subscriptions:', err);
+      }
+      
+      // Get stocks data from localStorage
+      const stocksYears = localStorage.getItem('stocks_years');
+      const stocksData = localStorage.getItem('stocks_data');
+      
+      // Get other localStorage data
+      const activeBudget = localStorage.getItem('activeBudget');
+      const currency = localStorage.getItem('budget_currency');
+      
+      // Create workbook
+      const workbook = XLSX.utils.book_new();
+      
+      // Sheet 1: Budgets Overview
+      const budgetsSheet = XLSX.utils.json_to_sheet([
+        { 'Budget Year': budgetsList.join(', ') || 'None' },
+        { 'Active Budget': activeBudget || 'None' },
+        { 'Currency': currency || 'None' },
+        { 'Export Date': new Date().toISOString() },
+      ]);
+      XLSX.utils.book_append_sheet(workbook, budgetsSheet, 'Overview');
+      
+      // Sheet 2: Budget Items (one sheet per budget year)
+      for (const year of budgetsList) {
+        const items = budgetDataMap[year] || [];
+        if (items.length > 0) {
+          // Transform budget items for Excel
+          const excelData = items.map((item: any) => {
+            const row: any = {
+              'Name': item.name || '',
+              'Type': item.type || '',
+              'Category': item.category || '',
+              'Amount': item.amount || 0,
+            };
+            
+            // Add monthly columns
+            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+            months.forEach(month => {
+              row[month] = item.months?.[month] || 0;
+            });
+            
+            return row;
+          });
+          
+          const sheet = XLSX.utils.json_to_sheet(excelData);
+          // Limit sheet name to 31 characters (Excel limit)
+          const sheetName = `Budget ${year}`.substring(0, 31);
+          XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+        }
+      }
+      
+      // Sheet 3: Loans
+      if (loansData.length > 0) {
+        const loansExcelData = loansData.map((loan: Loan) => ({
+          'Name': loan.name,
+          'Amount': loan.amount,
+          'Start Date': loan.startDate,
+          'Created At': loan.createdAt || '',
+          'Updated At': loan.updatedAt || '',
+        }));
+        const loansSheet = XLSX.utils.json_to_sheet(loansExcelData);
+        XLSX.utils.book_append_sheet(workbook, loansSheet, 'Loans');
+      }
+      
+      // Sheet 4: Subscriptions
+      if (subscriptionsData.length > 0) {
+        const subscriptionsExcelData = subscriptionsData.map((sub: any) => ({
+          'Name': sub.name,
+          'Price': sub.price,
+          'Billing Cycle': sub.billingCycle,
+          'Start Date': sub.startDate,
+          'Status': sub.status,
+          'Category': sub.category || '',
+          'Created At': sub.createdAt || '',
+          'Updated At': sub.updatedAt || '',
+        }));
+        const subscriptionsSheet = XLSX.utils.json_to_sheet(subscriptionsExcelData);
+        XLSX.utils.book_append_sheet(workbook, subscriptionsSheet, 'Subscriptions');
+      }
+      
+      // Sheet 5: Stocks
+      if (stocksData) {
+        try {
+          const stocks = JSON.parse(stocksData);
+          if (stocks.length > 0) {
+            const stocksExcelData = stocks.map((stock: any) => {
+              const row: any = {
+                'Name': stock.name || '',
+                'Year': stock.year || '',
+              };
+              
+              // Add monthly columns
+              const months = ['jan', 'feb', 'marts', 'april', 'maj', 'juni', 
+                            'juli', 'aug', 'sept', 'okt', 'nov'];
+              months.forEach(month => {
+                row[month.charAt(0).toUpperCase() + month.slice(1)] = stock.months?.[month] || 0;
+              });
+              
+              return row;
+            });
+            
+            const stocksSheet = XLSX.utils.json_to_sheet(stocksExcelData);
+            XLSX.utils.book_append_sheet(workbook, stocksSheet, 'Stocks');
+          }
+        } catch (e) {
+          console.error('Error parsing stocks data:', e);
+        }
+      }
+      
+      // Sheet 6: Preferences
+      const preferencesData = [
+        { 'Setting': 'Active Budget', 'Value': activeBudget || 'None' },
+        { 'Setting': 'Currency', 'Value': currency || 'None' },
+        { 'Setting': 'Stocks Years', 'Value': stocksYears ? JSON.parse(stocksYears).join(', ') : 'None' },
+      ];
+      const preferencesSheet = XLSX.utils.json_to_sheet(preferencesData);
+      XLSX.utils.book_append_sheet(workbook, preferencesSheet, 'Preferences');
+      
+      // Generate Excel file and download
+      const timestamp = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(workbook, `budget-export-${timestamp}.xlsx`);
+      
+      setError('');
+    } catch (err) {
+      console.error('Error downloading Excel file:', err);
+      setError('Failed to download Excel file. Please try again.');
+    } finally {
+      setDownloadingExcel(false);
+    }
   };
 
   return (
@@ -1024,6 +1321,85 @@ export default function SettingsPage() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Data Export Section */}
+        <Paper
+          sx={{
+            bgcolor: theme.palette.background.paper,
+            padding: isMobile ? '1.5rem' : '2rem',
+            marginBottom: isMobile ? '1.5rem' : '2rem',
+            borderRadius: '12px',
+            boxShadow: `0 2px 8px ${theme.palette.text.primary}10`,
+            transition: 'all 0.3s ease',
+            '&:hover': {
+              boxShadow: `0 4px 16px ${theme.palette.text.primary}15`,
+            },
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, marginBottom: '1.5rem' }}>
+            <DownloadIcon sx={{ color: theme.palette.success.main, fontSize: '1.5rem' }} />
+            <Typography sx={{ color: theme.palette.text.primary, fontWeight: 600 }} variant="h6">
+              Export Data
+            </Typography>
+          </Box>
+          <Typography sx={{ color: theme.palette.text.secondary, marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+            Download all your budget data, loans, subscriptions, stocks, and preferences to save a local backup on your computer. Choose JSON format for data portability or Excel format for easy viewing and editing.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              startIcon={downloading ? <CircularProgress size={20} sx={{ color: 'inherit' }} /> : <DownloadIcon />}
+              onClick={handleDownloadAllData}
+              disabled={downloading || downloadingExcel}
+              sx={{
+                bgcolor: theme.palette.success.main,
+                color: theme.palette.success.contrastText || theme.palette.text.primary,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '10px 24px',
+                '&:hover': {
+                  bgcolor: theme.palette.success.dark,
+                  transform: 'translateY(-2px)',
+                  boxShadow: `0 4px 12px ${theme.palette.success.main}40`,
+                },
+                '&:disabled': {
+                  bgcolor: theme.palette.background.default,
+                  color: theme.palette.text.secondary,
+                },
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {downloading ? 'Downloading...' : 'Download JSON'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={downloadingExcel ? <CircularProgress size={20} sx={{ color: 'inherit' }} /> : <TableChartIcon />}
+              onClick={handleDownloadExcel}
+              disabled={downloading || downloadingExcel}
+              sx={{
+                bgcolor: theme.palette.info.main,
+                color: theme.palette.info.contrastText || theme.palette.text.primary,
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                padding: '10px 24px',
+                '&:hover': {
+                  bgcolor: theme.palette.info.dark,
+                  transform: 'translateY(-2px)',
+                  boxShadow: `0 4px 12px ${theme.palette.info.main}40`,
+                },
+                '&:disabled': {
+                  bgcolor: theme.palette.background.default,
+                  color: theme.palette.text.secondary,
+                },
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {downloadingExcel ? 'Downloading...' : 'Download Excel'}
+            </Button>
+          </Box>
+        </Paper>
 
         {/* Stocks Years Section */}
         <Paper

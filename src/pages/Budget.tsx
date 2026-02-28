@@ -15,6 +15,8 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import InsightsIcon from '@mui/icons-material/Insights';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import CloseIcon from '@mui/icons-material/Close';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -115,6 +117,7 @@ export default function Budget() {
     const [editingExpenseItem, setEditingExpenseItem] = useState<LineItem | null>(null);
     const [editExpenseName, setEditExpenseName] = useState<string>('');
     const [editExpenseCategory, setEditExpenseCategory] = useState<string>('');
+    const [fullscreenOpen, setFullscreenOpen] = useState(false);
 
     const handleOpenEditExpenseModal = (item: LineItem) => {
         setEditingExpenseItem(item);
@@ -771,31 +774,49 @@ export default function Budget() {
                 overflow: 'hidden',
                 maxWidth: '100%'
             }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: isMobile ? '1rem' : '2rem', flexWrap: 'wrap' }}>
-                    <Typography sx={{ color: theme.palette.text.primary }} variant={isMobile ? "h5" : "h4"}>
-                        Budget {year}
-                    </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, marginBottom: isMobile ? '1rem' : '2rem', flexWrap: 'wrap' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography sx={{ color: theme.palette.text.primary }} variant={isMobile ? "h5" : "h4"}>
+                            Budget {year}
+                        </Typography>
+                        <IconButton
+                            onClick={() => setInsightsModalOpen(true)}
+                            disabled={!isLoaded || !user?.id || loading}
+                            sx={{
+                                color: theme.palette.info.main,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.info.main,
+                                    color: theme.palette.info.contrastText || theme.palette.text.primary,
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                },
+                            }}
+                            title="View Insights"
+                        >
+                            <InsightsIcon />
+                        </IconButton>
+                        <IconButton
+                            onClick={handleOpenMenu}
+                            disabled={!isLoaded || !user?.id || loading}
+                            sx={{
+                                color: theme.palette.primary.main,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.primary.main,
+                                    color: theme.palette.primary.contrastText,
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                },
+                            }}
+                        >
+                            <AddIcon />
+                        </IconButton>
+                    </Box>
                     <IconButton
-                        onClick={() => setInsightsModalOpen(true)}
-                        disabled={!isLoaded || !user?.id || loading}
-                        sx={{
-                            color: theme.palette.info.main,
-                            bgcolor: theme.palette.background.paper,
-                            '&:hover': {
-                                bgcolor: theme.palette.info.main,
-                                color: theme.palette.info.contrastText || theme.palette.text.primary,
-                            },
-                            '&:disabled': {
-                                opacity: 0.5,
-                            },
-                        }}
-                        title="View Insights"
-                    >
-                        <InsightsIcon />
-                    </IconButton>
-                    <IconButton
-                        onClick={handleOpenMenu}
-                        disabled={!isLoaded || !user?.id || loading}
+                        onClick={() => setFullscreenOpen(true)}
                         sx={{
                             color: theme.palette.primary.main,
                             bgcolor: theme.palette.background.paper,
@@ -803,12 +824,10 @@ export default function Budget() {
                                 bgcolor: theme.palette.primary.main,
                                 color: theme.palette.primary.contrastText,
                             },
-                            '&:disabled': {
-                                opacity: 0.5,
-                            },
                         }}
+                        title="Fullscreen"
                     >
-                        <AddIcon />
+                        <FullscreenIcon />
                     </IconButton>
                     <Menu
                         anchorEl={menuAnchor}
@@ -1850,6 +1869,473 @@ export default function Budget() {
                     </Table>
                 </Paper>
 
+                {/* Fullscreen Dialog */}
+                <Dialog
+                    open={fullscreenOpen}
+                    onClose={() => setFullscreenOpen(false)}
+                    fullScreen
+                    PaperProps={{
+                        sx: {
+                            bgcolor: theme.palette.background.default,
+                            m: 0,
+                        }
+                    }}
+                >
+                    <DialogTitle sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        bgcolor: theme.palette.background.paper,
+                        borderBottom: `1px solid ${theme.palette.secondary.main}`,
+                    }}>
+                        <Typography variant="h6" sx={{ color: theme.palette.text.primary }}>
+                            Income & Expenses - {year}
+                        </Typography>
+                        <IconButton
+                            onClick={() => setFullscreenOpen(false)}
+                            sx={{
+                                color: theme.palette.text.primary,
+                            }}
+                        >
+                            <FullscreenExitIcon />
+                        </IconButton>
+                    </DialogTitle>
+                    <DialogContent sx={{ p: 0, bgcolor: theme.palette.background.default }}>
+                        <Paper sx={{
+                            bgcolor: theme.palette.background.paper,
+                            overflow: 'auto',
+                            width: '100%',
+                            height: '100%',
+                            maxHeight: 'calc(100vh - 64px)',
+                            '&::-webkit-scrollbar': {
+                                height: '8px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                                background: theme.palette.background.default,
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                                background: theme.palette.secondary.main,
+                                borderRadius: '4px',
+                            },
+                        }}>
+                            <Table stickyHeader sx={{
+                                tableLayout: isMobile ? 'auto' : 'fixed',
+                                width: isMobile ? 'max-content' : '100%',
+                                minWidth: isMobile ? '800px' : 'auto',
+                                '& .MuiTableHead-root': {
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 10,
+                                },
+                            }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell
+                                            sx={{
+                                                bgcolor: theme.palette.background.paper,
+                                                color: theme.palette.text.primary,
+                                                fontWeight: 'bold',
+                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                width: isMobile ? '120px' : '15%',
+                                                minWidth: isMobile ? '120px' : 'auto',
+                                                padding: isMobile ? '8px 4px' : '12px 8px',
+                                                fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                position: 'sticky',
+                                                top: 0,
+                                                zIndex: isMobile ? 11 : 10,
+                                                ...(isMobile && {
+                                                    left: 0,
+                                                }),
+                                            }}
+                                        >
+                                            Amount
+                                        </TableCell>
+                                        {MONTHS.map((month) => (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    bgcolor: theme.palette.background.paper,
+                                                    color: theme.palette.text.primary,
+                                                    fontWeight: 'bold',
+                                                    width: isMobile ? '60px' : `${85 / 12}%`,
+                                                    minWidth: isMobile ? '60px' : 'auto',
+                                                    padding: isMobile ? '8px 2px' : '12px 4px',
+                                                    fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                                    position: 'sticky',
+                                                    top: 0,
+                                                    zIndex: 10,
+                                                }}
+                                            >
+                                                {month.substring(0, 3)}
+                                            </TableCell>
+                                        ))}
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {/* Income Items */}
+                                    {lineItems
+                                        .filter(item => item.type === 'income')
+                                        .map((item) => (
+                                            <TableRow
+                                                key={item.id}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                                onDragOver={(e) => handleDragOver(e, item.id)}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={(e) => handleDrop(e, item.id, 'income')}
+                                                onDragEnd={handleDragEnd}
+                                                sx={{
+                                                    opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                    cursor: 'move',
+                                                    '&:hover': {
+                                                        bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                    },
+                                                }}
+                                            >
+                                                <TableCell
+                                                    onClick={() => handleNameCellClick(item.id)}
+                                                    sx={{
+                                                        color: '#4caf50', // Bright green for income
+                                                        fontWeight: 700,
+                                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                        padding: isMobile ? '6px 2px' : '12px 8px',
+                                                        cursor: 'pointer',
+                                                        fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                                        bgcolor: theme.palette.background.paper,
+                                                        maxWidth: isMobile ? '120px' : 'none',
+                                                        ...(isMobile && {
+                                                            position: 'sticky',
+                                                            left: 0,
+                                                            zIndex: 2,
+                                                        }),
+                                                        '&:hover': {
+                                                            bgcolor: 'transparent',
+                                                        },
+                                                    }}
+                                                >
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1, minWidth: 0, width: '100%' }}>
+                                                        {selectedItemForDelete === item.id && item.type === 'income' && (
+                                                            <DragIndicatorIcon
+                                                                sx={{
+                                                                    color: theme.palette.text.secondary,
+                                                                    fontSize: '1.2rem',
+                                                                    cursor: 'grab',
+                                                                    flexShrink: 0,
+                                                                    '&:active': {
+                                                                        cursor: 'grabbing',
+                                                                    },
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {item.name}
+                                                        </span>
+                                                        {selectedItemForDelete === item.id && item.type === 'income' && (
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item.id);
+                                                                }}
+                                                                sx={{
+                                                                    color: theme.palette.error.main,
+                                                                    padding: '4px',
+                                                                    '&:hover': {
+                                                                        bgcolor: theme.palette.error.main,
+                                                                        color: theme.palette.error.contrastText,
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                                {MONTHS.map((month) => {
+                                                    const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                    const cellValue = getCellValue(item, month);
+
+                                                    return (
+                                                        <TableCell
+                                                            key={month}
+                                                            align="center"
+                                                            onClick={() => handleCellClick(item.id, month)}
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                padding: isMobile ? '4px 2px' : '4px',
+                                                                fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                                                cursor: 'pointer',
+                                                                '&:hover': {
+                                                                    bgcolor: theme.palette.background.default,
+                                                                },
+                                                            }}
+                                                        >
+                                                            {isEditing ? (
+                                                                <TextField
+                                                                    value={editValue}
+                                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                                    onBlur={handleCellSave}
+                                                                    onKeyDown={handleCellKeyPress}
+                                                                    autoFocus
+                                                                    type="text"
+                                                                    size="small"
+                                                                    sx={{
+                                                                        width: '80px',
+                                                                        '& .MuiOutlinedInput-root': {
+                                                                            color: theme.palette.text.primary,
+                                                                            bgcolor: theme.palette.background.paper,
+                                                                            '& fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&:hover fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&.Mui-focused fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                    inputProps={{
+                                                                        style: {
+                                                                            textAlign: 'center',
+                                                                            padding: '4px 8px',
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                formatCurrency(cellValue, currency)
+                                                            )}
+                                                        </TableCell>
+                                                    );
+                                                })}
+                                            </TableRow>
+                                        ))}
+                                    {/* Total Income Row */}
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={1}
+                                            sx={{
+                                                color: '#4caf50',
+                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                padding: isMobile ? '8px 4px' : '12px 8px',
+                                                fontWeight: 'bold',
+                                                fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                bgcolor: theme.palette.background.default,
+                                                ...(isMobile && {
+                                                    position: 'sticky',
+                                                    left: 0,
+                                                    zIndex: 2,
+                                                }),
+                                            }}
+                                        >
+                                            Total Income
+                                        </TableCell>
+                                        {MONTHS.map((month) => {
+                                            const totalIncome = lineItems
+                                                .filter(item => item.type === 'income')
+                                                .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+
+                                            return (
+                                                <TableCell
+                                                    key={month}
+                                                    align="center"
+                                                    sx={{
+                                                        color: '#4caf50',
+                                                        padding: '12px 4px',
+                                                        fontSize: '0.875rem',
+                                                        fontWeight: 'bold',
+                                                        bgcolor: theme.palette.background.default,
+                                                    }}
+                                                >
+                                                    {totalIncome === 0 ? '-' : formatCurrency(totalIncome, currency)}
+                                                </TableCell>
+                                            );
+                                        })}
+                                    </TableRow>
+                                    {/* Separator Row */}
+                                    <TableRow>
+                                        <TableCell
+                                            colSpan={13}
+                                            sx={{
+                                                padding: '24px 8px',
+                                                bgcolor: theme.palette.background.default,
+                                                borderTop: `2px solid ${theme.palette.secondary.main}`,
+                                                borderBottom: `2px solid ${theme.palette.secondary.main}`,
+                                            }}
+                                        />
+                                    </TableRow>
+                                    {/* Regular Expense Items */}
+                                    {lineItems
+                                        .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
+                                        .map((item) => {
+                                            return (
+                                                <TableRow
+                                                    key={item.id}
+                                                    draggable
+                                                    onDragStart={(e) => handleDragStart(e, item.id)}
+                                                    onDragOver={(e) => handleDragOver(e, item.id)}
+                                                    onDragLeave={handleDragLeave}
+                                                    onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                                    onDragEnd={handleDragEnd}
+                                                    sx={{
+                                                        opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                        bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                        cursor: 'move',
+                                                        '&:hover': {
+                                                            bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                        },
+                                                    }}
+                                                >
+                                                    <TableCell
+                                                        onClick={() => handleNameCellClick(item.id)}
+                                                        sx={{
+                                                            color: item.linkedLoanId ? theme.palette.info.main : '#f44336',
+                                                            fontWeight: 700,
+                                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                            padding: isMobile ? '6px 2px' : '12px 8px',
+                                                            cursor: 'pointer',
+                                                            fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                                            bgcolor: theme.palette.background.paper,
+                                                            maxWidth: isMobile ? '120px' : 'none',
+                                                            ...(isMobile && {
+                                                                position: 'sticky',
+                                                                left: 0,
+                                                                zIndex: 2,
+                                                            }),
+                                                            '&:hover': {
+                                                                bgcolor: 'transparent',
+                                                            },
+                                                        }}
+                                                    >
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1, minWidth: 0, width: '100%' }}>
+                                                            {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
+                                                                <DragIndicatorIcon
+                                                                    sx={{
+                                                                        color: theme.palette.text.secondary,
+                                                                        fontSize: '1.2rem',
+                                                                        cursor: 'grab',
+                                                                        flexShrink: 0,
+                                                                        '&:active': {
+                                                                            cursor: 'grabbing',
+                                                                        },
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            {item.linkedLoanId && (
+                                                                <AccountBalanceIcon
+                                                                    sx={{
+                                                                        fontSize: '1rem',
+                                                                        color: theme.palette.info.main,
+                                                                        opacity: 0.8,
+                                                                        flexShrink: 0
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            {item.category && isDesktop && (
+                                                                <Chip
+                                                                    label={item.category}
+                                                                    size="small"
+                                                                    sx={{
+                                                                        height: '20px',
+                                                                        fontSize: '0.65rem',
+                                                                        bgcolor: theme.palette.primary.main,
+                                                                        color: theme.palette.primary.contrastText,
+                                                                        flexShrink: 0,
+                                                                    }}
+                                                                />
+                                                            )}
+                                                            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {item.name}
+                                                            </span>
+                                                            {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDeleteItem(item.id);
+                                                                    }}
+                                                                    sx={{
+                                                                        color: theme.palette.error.main,
+                                                                        padding: '4px',
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.error.main,
+                                                                            color: theme.palette.error.contrastText,
+                                                                        },
+                                                                    }}
+                                                                >
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+                                                    {MONTHS.map((month) => {
+                                                        const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                        const cellValue = getCellValue(item, month);
+
+                                                        return (
+                                                            <TableCell
+                                                                key={month}
+                                                                align="center"
+                                                                onClick={() => handleCellClick(item.id, month)}
+                                                                sx={{
+                                                                    color: theme.palette.text.primary,
+                                                                    padding: isMobile ? '4px 2px' : '4px',
+                                                                    fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                                                    cursor: 'pointer',
+                                                                    '&:hover': {
+                                                                        bgcolor: theme.palette.background.default,
+                                                                    },
+                                                                }}
+                                                            >
+                                                                {isEditing ? (
+                                                                    <TextField
+                                                                        value={editValue}
+                                                                        onChange={(e) => setEditValue(e.target.value)}
+                                                                        onBlur={handleCellSave}
+                                                                        onKeyDown={handleCellKeyPress}
+                                                                        autoFocus
+                                                                        type="text"
+                                                                        size="small"
+                                                                        sx={{
+                                                                            width: '80px',
+                                                                            '& .MuiOutlinedInput-root': {
+                                                                                color: theme.palette.text.primary,
+                                                                                bgcolor: theme.palette.background.paper,
+                                                                                '& fieldset': {
+                                                                                    borderColor: theme.palette.primary.main,
+                                                                                },
+                                                                                '&:hover fieldset': {
+                                                                                    borderColor: theme.palette.primary.main,
+                                                                                },
+                                                                                '&.Mui-focused fieldset': {
+                                                                                    borderColor: theme.palette.primary.main,
+                                                                                },
+                                                                            },
+                                                                        }}
+                                                                        inputProps={{
+                                                                            style: {
+                                                                                textAlign: 'center',
+                                                                                padding: '4px 8px',
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                ) : (
+                                                                    formatCurrency(cellValue, currency)
+                                                                )}
+                                                            </TableCell>
+                                                        );
+                                                    })}
+                                                </TableRow>
+                                            );
+                                        })}
+                                </TableBody>
+                            </Table>
+                        </Paper>
+                    </DialogContent>
+                </Dialog>
+
                 {/* Static Expenses List */}
                 <Paper sx={{ bgcolor: theme.palette.background.paper, padding: isMobile ? '1rem' : '2rem', marginTop: isMobile ? '1rem' : '2rem' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: '1.5rem' }}>
@@ -1931,14 +2417,14 @@ export default function Budget() {
 
                         return (
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                {sortedMonths.map((month, monthIndex) => {
+                                {sortedMonths.map((month) => {
                                     const monthExpenses = expensesByMonth[month];
                                     const monthTotal = monthExpenses.reduce((sum, item) => sum + (item.staticExpensePrice || 0), 0);
 
                                     return (
                                         <Accordion
                                             key={month}
-                                            defaultExpanded={monthIndex === 0}
+                                            defaultExpanded={false}
                                             sx={{
                                                 bgcolor: theme.palette.background.default,
                                                 '&:before': {
@@ -2718,16 +3204,29 @@ export default function Budget() {
                                                                 }}>
                                                                     {formatCurrency(data.expense, currency).replace(/\s/g, '')}
                                                                 </Typography>
-                                                                <Typography sx={{
-                                                                    fontSize: isMobile ? '0.55rem' : isDesktop ? '0.65rem' : '0.6rem',
-                                                                    color: savings >= 0 ? '#4caf50' : '#f44336',
-                                                                    fontWeight: 'bold',
-                                                                    textAlign: 'center',
-                                                                    lineHeight: 1.2,
-                                                                    mt: 0.25
-                                                                }}>
-                                                                    {formatCurrency(savings, currency).replace(/\s/g, '')}
-                                                                </Typography>
+                                                                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.3, justifyContent: 'center', mt: 0.25 }}>
+                                                                    <Typography sx={{
+                                                                        fontSize: isMobile ? '0.55rem' : isDesktop ? '0.65rem' : '0.6rem',
+                                                                        color: savings >= 0 ? '#4caf50' : '#f44336',
+                                                                        fontWeight: 'bold',
+                                                                        textAlign: 'center',
+                                                                        lineHeight: 1.2,
+                                                                    }}>
+                                                                        {formatCurrency(savings, currency).replace(/\s/g, '')}
+                                                                    </Typography>
+                                                                    {data.income > 0 && (
+                                                                        <Typography sx={{
+                                                                            fontSize: isMobile ? '0.5rem' : isDesktop ? '0.6rem' : '0.55rem',
+                                                                            color: savings >= 0 ? '#4caf50' : '#f44336',
+                                                                            fontWeight: 'bold',
+                                                                            textAlign: 'center',
+                                                                            lineHeight: 1.2,
+                                                                            opacity: 0.8
+                                                                        }}>
+                                                                            ({savings >= 0 ? '+' : ''}{((savings / data.income) * 100).toFixed(1)}%)
+                                                                        </Typography>
+                                                                    )}
+                                                                </Box>
                                                             </Box>
                                                         </Box>
                                                     );
