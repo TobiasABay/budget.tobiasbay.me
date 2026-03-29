@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -17,6 +17,8 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import CloseIcon from '@mui/icons-material/Close';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
+import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -159,6 +161,7 @@ export default function Budget() {
     const [editExpenseName, setEditExpenseName] = useState<string>('');
     const [editExpenseCategory, setEditExpenseCategory] = useState<string>('');
     const [fullscreenOpen, setFullscreenOpen] = useState(false);
+    const [budgetTableExpanded, setBudgetTableExpanded] = useState(true);
 
     const handleOpenEditExpenseModal = (item: LineItem) => {
         setEditingExpenseItem(item);
@@ -867,20 +870,38 @@ export default function Budget() {
                             <AddIcon />
                         </IconButton>
                     </Box>
-                    <IconButton
-                        onClick={() => setFullscreenOpen(true)}
-                        sx={{
-                            color: theme.palette.primary.main,
-                            bgcolor: theme.palette.background.paper,
-                            '&:hover': {
-                                bgcolor: theme.palette.primary.main,
-                                color: theme.palette.primary.contrastText,
-                            },
-                        }}
-                        title="Fullscreen"
-                    >
-                        <FullscreenIcon />
-                    </IconButton>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <IconButton
+                            onClick={() => setBudgetTableExpanded((v) => !v)}
+                            sx={{
+                                color: theme.palette.secondary.light,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.secondary.main,
+                                    color: theme.palette.secondary.contrastText,
+                                },
+                            }}
+                            title={budgetTableExpanded ? 'Hide budget table' : 'Show budget table'}
+                            aria-expanded={budgetTableExpanded}
+                            aria-label={budgetTableExpanded ? 'Hide budget table' : 'Show budget table'}
+                        >
+                            {budgetTableExpanded ? <UnfoldLessIcon /> : <UnfoldMoreIcon />}
+                        </IconButton>
+                        <IconButton
+                            onClick={() => setFullscreenOpen(true)}
+                            sx={{
+                                color: theme.palette.primary.main,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.primary.main,
+                                    color: theme.palette.primary.contrastText,
+                                },
+                            }}
+                            title="Fullscreen"
+                        >
+                            <FullscreenIcon />
+                        </IconButton>
+                    </Box>
                     <Menu
                         anchorEl={menuAnchor}
                         open={Boolean(menuAnchor)}
@@ -939,33 +960,34 @@ export default function Budget() {
                     </Menu>
                 </Box>
 
-                <Paper sx={{
-                    bgcolor: theme.palette.background.paper,
-                    overflow: 'auto',
-                    width: '100%',
-                    maxWidth: '100%',
-                    maxHeight: 'calc(100vh - 200px)',
-                    '&::-webkit-scrollbar': {
-                        height: '8px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                        background: theme.palette.background.default,
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                        background: theme.palette.secondary.main,
-                        borderRadius: '4px',
-                    },
-                }}>
-                    <Table stickyHeader sx={{
-                        tableLayout: isMobile ? 'auto' : 'fixed',
-                        width: isMobile ? 'max-content' : '100%',
-                        minWidth: isMobile ? '800px' : 'auto',
-                        '& .MuiTableHead-root': {
-                            position: 'sticky',
-                            top: 0,
-                            zIndex: 10,
+                <Collapse in={budgetTableExpanded} timeout="auto" unmountOnExit={false}>
+                    <Paper sx={{
+                        bgcolor: theme.palette.background.paper,
+                        overflow: 'auto',
+                        width: '100%',
+                        maxWidth: '100%',
+                        maxHeight: 'calc(100vh - 200px)',
+                        '&::-webkit-scrollbar': {
+                            height: '8px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                            background: theme.palette.background.default,
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                            background: theme.palette.secondary.main,
+                            borderRadius: '4px',
                         },
                     }}>
+                        <Table stickyHeader sx={{
+                            tableLayout: isMobile ? 'auto' : 'fixed',
+                            width: isMobile ? 'max-content' : '100%',
+                            minWidth: isMobile ? '800px' : 'auto',
+                            '& .MuiTableHead-root': {
+                                position: 'sticky',
+                                top: 0,
+                                zIndex: 10,
+                            },
+                        }}>
                         <TableHead>
                             <TableRow>
                                 <TableCell
@@ -1918,8 +1940,35 @@ export default function Budget() {
                                 })}
                             </TableRow>
                         </TableBody>
-                    </Table>
-                </Paper>
+                        </Table>
+                    </Paper>
+                </Collapse>
+
+                {!budgetTableExpanded && (
+                    <Paper
+                        onClick={() => setBudgetTableExpanded(true)}
+                        sx={{
+                            bgcolor: theme.palette.background.paper,
+                            py: 1,
+                            px: 2,
+                            mb: isMobile ? '1rem' : '2rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                            cursor: 'pointer',
+                            border: `1px dashed ${theme.palette.secondary.main}`,
+                            '&:hover': {
+                                bgcolor: theme.palette.background.default,
+                            },
+                        }}
+                    >
+                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.9rem' }}>
+                            Budget table hidden — click to expand
+                        </Typography>
+                        <UnfoldMoreIcon sx={{ color: theme.palette.secondary.light, flexShrink: 0 }} />
+                    </Paper>
+                )}
 
                 {/* Fullscreen Dialog */}
                 <Dialog
