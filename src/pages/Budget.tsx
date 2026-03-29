@@ -47,6 +47,21 @@ const EXPENSE_CATEGORIES = [
     'Other'
 ] as const;
 
+/** Order of regular expense rows in the budget table (remaining categories follow). */
+const EXPENSE_TABLE_CATEGORY_ORDER: readonly (typeof EXPENSE_CATEGORIES)[number][] = [
+    'Housing',
+    'Utilities',
+    'Transportation',
+    'Insurance',
+    'Food',
+    'Healthcare',
+    'Fitness',
+    'Entertainment',
+    'Shopping',
+    'Education',
+    'Other',
+];
+
 /** Illustrative share of total spending for one person (roughly aligned with consumer expenditure surveys). Sums to 1. */
 const BENCHMARK_ONE_PERSON_EXPENSE_SHARES: Record<(typeof EXPENSE_CATEGORIES)[number], number> = {
     Housing: 0.33,
@@ -105,6 +120,19 @@ interface LineItem {
     staticExpenseDate?: string; // Format: "YYYY-MM-DD"
     staticExpensePrice?: number;
     category?: string | null; // Expense category
+}
+
+function compareRegularExpenseRows(a: LineItem, b: LineItem): number {
+    const rawA = (a.category && a.category.trim()) || 'Other';
+    const rawB = (b.category && b.category.trim()) || 'Other';
+    const catA = (EXPENSE_CATEGORIES as readonly string[]).includes(rawA) ? rawA : 'Other';
+    const catB = (EXPENSE_CATEGORIES as readonly string[]).includes(rawB) ? rawB : 'Other';
+    const idxA = EXPENSE_TABLE_CATEGORY_ORDER.indexOf(catA as (typeof EXPENSE_CATEGORIES)[number]);
+    const idxB = EXPENSE_TABLE_CATEGORY_ORDER.indexOf(catB as (typeof EXPENSE_CATEGORIES)[number]);
+    const orderA = idxA === -1 ? EXPENSE_TABLE_CATEGORY_ORDER.length : idxA;
+    const orderB = idxB === -1 ? EXPENSE_TABLE_CATEGORY_ORDER.length : idxB;
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
 }
 
 interface Loan {
@@ -1260,6 +1288,7 @@ export default function Budget() {
                                 {/* Regular Expense Items */}
                                 {lineItems
                                     .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
+                                    .sort(compareRegularExpenseRows)
                                     .map((item) => {
                                         return (
                                             <TableRow
@@ -2304,6 +2333,7 @@ export default function Budget() {
                                     {/* Regular Expense Items */}
                                     {lineItems
                                         .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
+                                        .sort(compareRegularExpenseRows)
                                         .map((item) => {
                                             return (
                                                 <TableRow
