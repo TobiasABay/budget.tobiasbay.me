@@ -1640,6 +1640,7 @@ export default function Budget() {
                                         </TableCell>
                                         {MONTHS.map((month) => {
                                             const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                            const buyCount = staticExpenses.filter(item => (item.months[month] || 0) > 0).length;
                                             return (
                                                 <TableCell
                                                     key={month}
@@ -1652,7 +1653,9 @@ export default function Budget() {
                                                         bgcolor: theme.palette.background.default,
                                                     }}
                                                 >
-                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
+                                                    {totalStaticExpense === 0
+                                                        ? '-'
+                                                        : `${formatCurrency(totalStaticExpense, currency)} (${buyCount})`}
                                                 </TableCell>
                                             );
                                         })}
@@ -2447,7 +2450,7 @@ export default function Budget() {
                                                     {month}
                                                 </Typography>
                                                 <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold' }}>
-                                                    {formatCurrency(monthTotal, currency)}
+                                                    {formatCurrency(monthTotal, currency)} ({monthExpenses.length})
                                                 </Typography>
                                             </AccordionSummary>
                                             <AccordionDetails sx={{ padding: '1rem', paddingTop: '0.5rem' }}>
