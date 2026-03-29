@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -41,7 +41,36 @@ const EXPENSE_CATEGORIES = [
     'Shopping',
     'Education',
     'Other'
-];
+] as const;
+
+/** Illustrative share of total spending for one person (roughly aligned with consumer expenditure surveys). Sums to 1. */
+const BENCHMARK_ONE_PERSON_EXPENSE_SHARES: Record<(typeof EXPENSE_CATEGORIES)[number], number> = {
+    Housing: 0.33,
+    Insurance: 0.11,
+    Food: 0.12,
+    Transportation: 0.14,
+    Utilities: 0.07,
+    Healthcare: 0.08,
+    Fitness: 0.02,
+    Entertainment: 0.05,
+    Shopping: 0.04,
+    Education: 0.02,
+    Other: 0.02,
+};
+
+function cosineSimilarity01(a: number[], b: number[]): number {
+    let dot = 0;
+    let sumA2 = 0;
+    let sumB2 = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        sumA2 += a[i] * a[i];
+        sumB2 += b[i] * b[i];
+    }
+    const denom = Math.sqrt(sumA2) * Math.sqrt(sumB2);
+    if (denom === 0) return 0;
+    return Math.min(1, Math.max(0, dot / denom));
+}
 
 interface LineItem {
     id: string;
@@ -746,6 +775,16 @@ export default function Budget() {
             .map(([category, amount]) => ({ category, amount }))
             .sort((a, b) => b.amount - a.amount);
 
+        const benchmarkSimilarityScore =
+            totalExpense > 0
+                ? Math.round(
+                    cosineSimilarity01(
+                        EXPENSE_CATEGORIES.map((cat) => (expensesByCategory[cat] || 0) / totalExpense),
+                        EXPENSE_CATEGORIES.map((cat) => BENCHMARK_ONE_PERSON_EXPENSE_SHARES[cat])
+                    ) * 100
+                )
+                : null;
+
         return {
             monthlyData,
             totalIncome,
@@ -760,7 +799,8 @@ export default function Budget() {
             savingsRate,
             funExpensesByItem,
             totalFunExpenses,
-            categoryBreakdown
+            categoryBreakdown,
+            benchmarkSimilarityScore
         };
     };
 
@@ -3039,6 +3079,71 @@ export default function Budget() {
 
                             return (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+                                    {/* Benchmark vs typical one-person spending mix */}
+                                    <Paper
+                                        sx={{
+                                            p: 2,
+                                            bgcolor: theme.palette.background.default,
+                                            border: `1px solid ${theme.palette.secondary.main}`,
+                                        }}
+                                    >
+                                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                                            <Box sx={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem', fontWeight: 600 }}>
+                                                    Typical spending mix score
+                                                </Typography>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', mt: 0.5, lineHeight: 1.4 }}>
+                                                    How closely your category split matches an illustrative average one-person budget (consumer survey–style shares). This measures resemblance to common patterns, not whether your plan is good or bad.
+                                                </Typography>
+                                            </Box>
+                                            {insights.benchmarkSimilarityScore == null ? (
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem', fontStyle: 'italic' }}>
+                                                    Add expenses to see a score.
+                                                </Typography>
+                                            ) : (
+                                                <Box sx={{ textAlign: isMobile ? 'left' : 'right', minWidth: isMobile ? '100%' : 120 }}>
+                                                    <Typography
+                                                        sx={{
+                                                            fontSize: isMobile ? '2rem' : '2.5rem',
+                                                            fontWeight: 800,
+                                                            lineHeight: 1.1,
+                                                            color:
+                                                                insights.benchmarkSimilarityScore >= 75
+                                                                    ? theme.palette.success.main
+                                                                    : insights.benchmarkSimilarityScore >= 50
+                                                                      ? theme.palette.info.main
+                                                                      : theme.palette.warning.main,
+                                                        }}
+                                                    >
+                                                        {insights.benchmarkSimilarityScore}
+                                                        <Typography component="span" sx={{ fontSize: '0.45em', fontWeight: 600, color: theme.palette.text.secondary, ml: 0.25 }}>
+                                                            /100
+                                                        </Typography>
+                                                    </Typography>
+                                                    <LinearProgress
+                                                        variant="determinate"
+                                                        value={insights.benchmarkSimilarityScore}
+                                                        sx={{
+                                                            mt: 1,
+                                                            height: 8,
+                                                            borderRadius: 1,
+                                                            bgcolor: theme.palette.background.paper,
+                                                            '& .MuiLinearProgress-bar': {
+                                                                borderRadius: 1,
+                                                                bgcolor:
+                                                                    insights.benchmarkSimilarityScore >= 75
+                                                                        ? theme.palette.success.main
+                                                                        : insights.benchmarkSimilarityScore >= 50
+                                                                          ? theme.palette.info.main
+                                                                          : theme.palette.warning.main,
+                                                            },
+                                                        }}
+                                                    />
+                                                </Box>
+                                            )}
+                                        </Box>
+                                    </Paper>
+
                                     {/* Summary Cards */}
                                     <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
