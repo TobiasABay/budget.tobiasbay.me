@@ -1,3 +1,14 @@
+/* Avoid horizontal layout jump when vertical scrollbar appears/disappears (e.g. toggling hide amounts). */
+html {
+  scrollbar-gutter: stable;
+}
+
+@supports not (scrollbar-gutter: stable) {
+  html {
+    overflow-y: scroll;
+  }
+}
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;

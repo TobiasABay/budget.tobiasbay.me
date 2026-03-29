@@ -19,6 +19,8 @@ import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -162,6 +164,18 @@ export default function Budget() {
     const [editExpenseCategory, setEditExpenseCategory] = useState<string>('');
     const [fullscreenOpen, setFullscreenOpen] = useState(false);
     const [budgetTableExpanded, setBudgetTableExpanded] = useState(true);
+    const [hideBudgetNumbers, setHideBudgetNumbers] = useState(false);
+
+    const formatBudgetAmount = (amount: number): string => {
+        if (amount === 0) return '-';
+        if (hideBudgetNumbers) return '••••';
+        return formatCurrency(amount, currency) || '-';
+    };
+
+    const formatBudgetPercent = (value: number, fractionDigits = 1): string => {
+        if (hideBudgetNumbers) return '•••';
+        return value.toFixed(fractionDigits);
+    };
 
     const handleOpenEditExpenseModal = (item: LineItem) => {
         setEditingExpenseItem(item);
@@ -888,6 +902,26 @@ export default function Budget() {
                             {budgetTableExpanded ? <UnfoldLessIcon /> : <UnfoldMoreIcon />}
                         </IconButton>
                         <IconButton
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setHideBudgetNumbers((v) => !v);
+                            }}
+                            sx={{
+                                color: theme.palette.secondary.light,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.secondary.main,
+                                    color: theme.palette.secondary.contrastText,
+                                },
+                            }}
+                            title={hideBudgetNumbers ? 'Show amounts' : 'Hide amounts'}
+                            aria-pressed={hideBudgetNumbers}
+                            aria-label={hideBudgetNumbers ? 'Show amounts' : 'Hide amounts'}
+                        >
+                            {hideBudgetNumbers ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                        </IconButton>
+                        <IconButton
                             onClick={() => setFullscreenOpen(true)}
                             sx={{
                                 color: theme.palette.primary.main,
@@ -988,253 +1022,62 @@ export default function Budget() {
                                 zIndex: 10,
                             },
                         }}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell
-                                    sx={{
-                                        bgcolor: theme.palette.background.paper,
-                                        color: theme.palette.text.primary,
-                                        fontWeight: 'bold',
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        width: isMobile ? '120px' : '15%',
-                                        minWidth: isMobile ? '120px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        position: 'sticky',
-                                        top: 0,
-                                        zIndex: isMobile ? 11 : 10,
-                                        ...(isMobile && {
-                                            left: 0,
-                                        }),
-                                    }}
-                                >
-                                    Amount
-                                </TableCell>
-                                {MONTHS.map((month) => (
+                            <TableHead>
+                                <TableRow>
                                     <TableCell
-                                        key={month}
-                                        align="center"
                                         sx={{
                                             bgcolor: theme.palette.background.paper,
                                             color: theme.palette.text.primary,
                                             fontWeight: 'bold',
-                                            width: isMobile ? '60px' : `${85 / 12}%`,
-                                            minWidth: isMobile ? '60px' : 'auto',
-                                            padding: isMobile ? '8px 2px' : '12px 4px',
-                                            fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            width: isMobile ? '120px' : '15%',
+                                            minWidth: isMobile ? '120px' : 'auto',
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
                                             position: 'sticky',
                                             top: 0,
-                                            zIndex: 10,
+                                            zIndex: isMobile ? 11 : 10,
+                                            ...(isMobile && {
+                                                left: 0,
+                                            }),
                                         }}
                                     >
-                                        {month.substring(0, 3)}
+                                        Amount
                                     </TableCell>
-                                ))}
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {/* Income Items */}
-                            {lineItems
-                                .filter(item => item.type === 'income')
-                                .map((item) => (
-                                    <TableRow
-                                        key={item.id}
-                                        draggable
-                                        onDragStart={(e) => handleDragStart(e, item.id)}
-                                        onDragOver={(e) => handleDragOver(e, item.id)}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, item.id, 'income')}
-                                        onDragEnd={handleDragEnd}
-                                        sx={{
-                                            opacity: draggedItemId === item.id ? 0.5 : 1,
-                                            bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
-                                            cursor: 'move',
-                                            '&:hover': {
-                                                bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
-                                            },
-                                        }}
-                                    >
-                                        <TableCell
-                                            onClick={() => handleNameCellClick(item.id)}
-                                            sx={{
-                                                color: '#4caf50', // Bright green for income
-                                                fontWeight: 700,
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: isMobile ? '6px 2px' : '12px 8px',
-                                                cursor: 'pointer',
-                                                fontSize: isMobile ? '0.7rem' : '0.875rem',
-                                                bgcolor: theme.palette.background.paper,
-                                                maxWidth: isMobile ? '120px' : 'none',
-                                                ...(isMobile && {
-                                                    position: 'sticky',
-                                                    left: 0,
-                                                    zIndex: 2,
-                                                }),
-                                                '&:hover': {
-                                                    bgcolor: 'transparent',
-                                                },
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1 }}>
-                                                {selectedItemForDelete === item.id && item.type === 'income' && (
-                                                    <DragIndicatorIcon
-                                                        sx={{
-                                                            color: theme.palette.text.secondary,
-                                                            fontSize: '1.2rem',
-                                                            cursor: 'grab',
-                                                            '&:active': {
-                                                                cursor: 'grabbing',
-                                                            },
-                                                        }}
-                                                    />
-                                                )}
-                                                <span style={{ flex: 1 }}>{item.name}</span>
-                                                {selectedItemForDelete === item.id && (
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteItem(item.id);
-                                                        }}
-                                                        sx={{
-                                                            color: theme.palette.error.main,
-                                                            padding: '4px',
-                                                            '&:hover': {
-                                                                bgcolor: theme.palette.error.main,
-                                                                color: theme.palette.error.contrastText,
-                                                            },
-                                                        }}
-                                                    >
-                                                        <DeleteIcon fontSize="small" />
-                                                    </IconButton>
-                                                )}
-                                            </Box>
-                                        </TableCell>
-                                        {MONTHS.map((month) => {
-                                            const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                            const cellValue = getCellValue(item, month);
-
-                                            return (
-                                                <TableCell
-                                                    key={month}
-                                                    align="center"
-                                                    onClick={() => handleCellClick(item.id, month)}
-                                                    sx={{
-                                                        color: theme.palette.text.primary,
-                                                        padding: isMobile ? '4px 2px' : '4px',
-                                                        fontSize: isMobile ? '0.7rem' : '0.875rem',
-                                                        cursor: 'pointer',
-                                                        '&:hover': {
-                                                            bgcolor: theme.palette.background.default,
-                                                        },
-                                                    }}
-                                                >
-                                                    {isEditing ? (
-                                                        <TextField
-                                                            value={editValue}
-                                                            onChange={(e) => setEditValue(e.target.value)}
-                                                            onBlur={handleCellSave}
-                                                            onKeyDown={handleCellKeyPress}
-                                                            autoFocus
-                                                            type="text"
-                                                            size="small"
-                                                            sx={{
-                                                                width: '80px',
-                                                                '& .MuiOutlinedInput-root': {
-                                                                    color: theme.palette.text.primary,
-                                                                    bgcolor: theme.palette.background.paper,
-                                                                    '& fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                    '&:hover fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                    '&.Mui-focused fieldset': {
-                                                                        borderColor: theme.palette.primary.main,
-                                                                    },
-                                                                },
-                                                            }}
-                                                            inputProps={{
-                                                                style: {
-                                                                    textAlign: 'center',
-                                                                    padding: '4px 8px',
-                                                                }
-                                                            }}
-                                                        />
-                                                    ) : (
-                                                        formatCurrency(cellValue, currency)
-                                                    )}
-                                                </TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                ))}
-                            {/* Total Income Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={1}
-                                    sx={{
-                                        color: '#4caf50', // Bright green for total income
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontWeight: 'bold',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        bgcolor: theme.palette.background.default,
-                                        ...(isMobile && {
-                                            position: 'sticky',
-                                            left: 0,
-                                            zIndex: 2,
-                                        }),
-                                    }}
-                                >
-                                    Total Income
-                                </TableCell>
-                                {MONTHS.map((month) => {
-                                    const totalIncome = lineItems
-                                        .filter(item => item.type === 'income')
-                                        .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-
-                                    return (
+                                    {MONTHS.map((month) => (
                                         <TableCell
                                             key={month}
                                             align="center"
                                             sx={{
-                                                color: '#4caf50', // Bright green for total income values
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
+                                                bgcolor: theme.palette.background.paper,
+                                                color: theme.palette.text.primary,
                                                 fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
+                                                width: isMobile ? '60px' : `${85 / 12}%`,
+                                                minWidth: isMobile ? '60px' : 'auto',
+                                                padding: isMobile ? '8px 2px' : '12px 4px',
+                                                fontSize: isMobile ? '0.7rem' : '0.8rem',
+                                                position: 'sticky',
+                                                top: 0,
+                                                zIndex: 10,
                                             }}
                                         >
-                                            {totalIncome === 0 ? '-' : formatCurrency(totalIncome, currency)}
+                                            {month.substring(0, 3)}
                                         </TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                            {/* Separator Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={13}
-                                    sx={{
-                                        padding: '24px 8px',
-                                        bgcolor: theme.palette.background.default,
-                                        borderTop: `2px solid ${theme.palette.secondary.main}`,
-                                        borderBottom: `2px solid ${theme.palette.secondary.main}`,
-                                    }}
-                                />
-                            </TableRow>
-                            {/* Regular Expense Items */}
-                            {lineItems
-                                .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
-                                .map((item) => {
-                                    return (
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {/* Income Items */}
+                                {lineItems
+                                    .filter(item => item.type === 'income')
+                                    .map((item) => (
                                         <TableRow
                                             key={item.id}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, item.id)}
                                             onDragOver={(e) => handleDragOver(e, item.id)}
                                             onDragLeave={handleDragLeave}
-                                            onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                            onDrop={(e) => handleDrop(e, item.id, 'income')}
                                             onDragEnd={handleDragEnd}
                                             sx={{
                                                 opacity: draggedItemId === item.id ? 0.5 : 1,
@@ -1248,7 +1091,7 @@ export default function Budget() {
                                             <TableCell
                                                 onClick={() => handleNameCellClick(item.id)}
                                                 sx={{
-                                                    color: item.linkedLoanId ? theme.palette.info.main : '#f44336', // Bright red for expenses
+                                                    color: '#4caf50', // Bright green for income
                                                     fontWeight: 700,
                                                     borderRight: `1px solid ${theme.palette.secondary.main}`,
                                                     padding: isMobile ? '6px 2px' : '12px 8px',
@@ -1266,191 +1109,8 @@ export default function Budget() {
                                                     },
                                                 }}
                                             >
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1, minWidth: 0, width: '100%' }}>
-                                                    {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
-                                                        <DragIndicatorIcon
-                                                            sx={{
-                                                                color: theme.palette.text.secondary,
-                                                                fontSize: '1.2rem',
-                                                                cursor: 'grab',
-                                                                flexShrink: 0,
-                                                                '&:active': {
-                                                                    cursor: 'grabbing',
-                                                                },
-                                                            }}
-                                                        />
-                                                    )}
-                                                    {item.linkedLoanId && (
-                                                        <AccountBalanceIcon
-                                                            sx={{
-                                                                fontSize: '1rem',
-                                                                color: theme.palette.info.main,
-                                                                opacity: 0.8,
-                                                                flexShrink: 0
-                                                            }}
-                                                        />
-                                                    )}
-                                                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {item.name}
-                                                    </span>
-                                                    {item.category && isDesktop && (
-                                                        <Chip
-                                                            label={item.category}
-                                                            size="small"
-                                                            sx={{
-                                                                fontSize: '0.7rem',
-                                                                height: '24px',
-                                                                bgcolor: theme.palette.background.default,
-                                                                color: theme.palette.text.primary,
-                                                                flexShrink: 0,
-                                                                maxWidth: '100%',
-                                                            }}
-                                                        />
-                                                    )}
-                                                    {selectedItemForDelete === item.id && (
-                                                        <>
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleOpenEditExpenseModal(item);
-                                                                }}
-                                                                sx={{
-                                                                    color: theme.palette.primary.main,
-                                                                    padding: '4px',
-                                                                    '&:hover': {
-                                                                        bgcolor: theme.palette.primary.main,
-                                                                        color: theme.palette.primary.contrastText,
-                                                                    },
-                                                                }}
-                                                                title="Edit Expense"
-                                                            >
-                                                                <EditIcon fontSize="small" />
-                                                            </IconButton>
-                                                            <IconButton
-                                                                size="small"
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDeleteItem(item.id);
-                                                                }}
-                                                                sx={{
-                                                                    color: item.linkedLoanId ? theme.palette.info.main : '#f44336',
-                                                                    padding: '4px',
-                                                                    '&:hover': {
-                                                                        bgcolor: item.linkedLoanId ? theme.palette.info.main : '#f44336',
-                                                                        color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.primary.contrastText,
-                                                                    },
-                                                                }}
-                                                            >
-                                                                <DeleteIcon fontSize="small" />
-                                                            </IconButton>
-                                                        </>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            {MONTHS.map((month) => {
-                                                const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                                const cellValue = getCellValue(item, month);
-
-                                                return (
-                                                    <TableCell
-                                                        key={month}
-                                                        align="center"
-                                                        onClick={() => handleCellClick(item.id, month)}
-                                                        sx={{
-                                                            color: theme.palette.text.primary,
-                                                            padding: '4px',
-                                                            fontSize: '0.875rem',
-                                                            cursor: 'pointer',
-                                                            '&:hover': {
-                                                                bgcolor: theme.palette.background.default,
-                                                            },
-                                                        }}
-                                                    >
-                                                        {isEditing ? (
-                                                            <TextField
-                                                                value={editValue}
-                                                                onChange={(e) => setEditValue(e.target.value)}
-                                                                onBlur={handleCellSave}
-                                                                onKeyDown={handleCellKeyPress}
-                                                                autoFocus
-                                                                type="text"
-                                                                size="small"
-                                                                sx={{
-                                                                    width: '80px',
-                                                                    '& .MuiOutlinedInput-root': {
-                                                                        color: theme.palette.text.primary,
-                                                                        bgcolor: theme.palette.background.paper,
-                                                                        '& fieldset': {
-                                                                            borderColor: theme.palette.primary.main,
-                                                                        },
-                                                                        '&:hover fieldset': {
-                                                                            borderColor: theme.palette.primary.main,
-                                                                        },
-                                                                        '&.Mui-focused fieldset': {
-                                                                            borderColor: theme.palette.primary.main,
-                                                                        },
-                                                                    },
-                                                                }}
-                                                                inputProps={{
-                                                                    style: {
-                                                                        textAlign: 'center',
-                                                                        padding: '4px 8px',
-                                                                    }
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            formatCurrency(cellValue, currency)
-                                                        )}
-                                                    </TableCell>
-                                                );
-                                            })}
-                                        </TableRow>
-                                    );
-                                })}
-                            {/* Nordnet Items (Stock Savings) */}
-                            {lineItems
-                                .filter(item => isNordnetItem(item))
-                                .map((item) => {
-                                    return (
-                                        <TableRow
-                                            key={item.id}
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, item.id)}
-                                            onDragOver={(e) => handleDragOver(e, item.id)}
-                                            onDragLeave={handleDragLeave}
-                                            onDrop={(e) => handleDrop(e, item.id, 'expense')}
-                                            onDragEnd={handleDragEnd}
-                                            sx={{
-                                                opacity: draggedItemId === item.id ? 0.5 : 1,
-                                                bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
-                                                cursor: 'move',
-                                                '&:hover': {
-                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
-                                                },
-                                            }}
-                                        >
-                                            <TableCell
-                                                onClick={() => handleNameCellClick(item.id)}
-                                                sx={{
-                                                    color: '#9c27b0', // Purple color for Nordnet/stock savings
-                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                    padding: isMobile ? '8px 4px' : '12px 8px',
-                                                    cursor: 'pointer',
-                                                    fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                                    bgcolor: theme.palette.background.paper,
-                                                    ...(isMobile && {
-                                                        position: 'sticky',
-                                                        left: 0,
-                                                        zIndex: 2,
-                                                    }),
-                                                    '&:hover': {
-                                                        bgcolor: 'transparent',
-                                                    },
-                                                }}
-                                            >
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    {selectedItemForDelete === item.id && (
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1 }}>
+                                                    {selectedItemForDelete === item.id && item.type === 'income' && (
                                                         <DragIndicatorIcon
                                                             sx={{
                                                                 color: theme.palette.text.secondary,
@@ -1462,16 +1122,7 @@ export default function Budget() {
                                                             }}
                                                         />
                                                     )}
-                                                    <TrendingUpIcon
-                                                        sx={{
-                                                            fontSize: '1rem',
-                                                            color: '#9c27b0',
-                                                            opacity: 0.9
-                                                        }}
-                                                    />
-                                                    <span style={{ flex: 1 }}>
-                                                        {item.name}
-                                                    </span>
+                                                    <span style={{ flex: 1 }}>{item.name}</span>
                                                     {selectedItemForDelete === item.id && (
                                                         <IconButton
                                                             size="small"
@@ -1480,138 +1131,11 @@ export default function Budget() {
                                                                 handleDeleteItem(item.id);
                                                             }}
                                                             sx={{
-                                                                color: '#9c27b0',
+                                                                color: theme.palette.error.main,
                                                                 padding: '4px',
                                                                 '&:hover': {
-                                                                    bgcolor: '#9c27b0',
-                                                                    color: theme.palette.primary.contrastText,
-                                                                },
-                                                            }}
-                                                        >
-                                                            <DeleteIcon />
-                                                        </IconButton>
-                                                    )}
-                                                </Box>
-                                            </TableCell>
-                                            {MONTHS.map((month) => {
-                                                const cellValue = item.months[month] || 0;
-                                                const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
-                                                return (
-                                                    <TableCell
-                                                        key={month}
-                                                        onClick={() => !isEditing && handleCellClick(item.id, month)}
-                                                        align="center"
-                                                        sx={{
-                                                            color: '#9c27b0',
-                                                            padding: '8px 4px',
-                                                            cursor: isEditing ? 'default' : 'pointer',
-                                                            bgcolor: theme.palette.background.paper,
-                                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                                            '&:hover': {
-                                                                bgcolor: isEditing ? 'transparent' : theme.palette.background.default,
-                                                            },
-                                                        }}
-                                                    >
-                                                        {isEditing ? (
-                                                            <TextField
-                                                                value={editValue}
-                                                                onChange={(e) => setEditValue(e.target.value)}
-                                                                onBlur={handleCellSave}
-                                                                onKeyPress={(e) => {
-                                                                    if (e.key === 'Enter') {
-                                                                        handleCellSave();
-                                                                    } else if (e.key === 'Escape') {
-                                                                        setEditingCell(null);
-                                                                        setEditValue('');
-                                                                    }
-                                                                }}
-                                                                autoFocus
-                                                                size="small"
-                                                                inputProps={{
-                                                                    style: {
-                                                                        textAlign: 'center',
-                                                                        padding: '4px',
-                                                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                                                    }
-                                                                }}
-                                                                sx={{
-                                                                    width: '100%',
-                                                                    '& .MuiOutlinedInput-root': {
-                                                                        '& fieldset': {
-                                                                            borderColor: '#9c27b0',
-                                                                        },
-                                                                        '&:hover fieldset': {
-                                                                            borderColor: '#9c27b0',
-                                                                        },
-                                                                        '&.Mui-focused fieldset': {
-                                                                            borderColor: '#9c27b0',
-                                                                        },
-                                                                    },
-                                                                }}
-                                                            />
-                                                        ) : (
-                                                            cellValue === 0 ? '-' : formatCurrency(cellValue, currency)
-                                                        )}
-                                                    </TableCell>
-                                                );
-                                            })}
-                                        </TableRow>
-                                    );
-                                })}
-                            {/* Loan Items */}
-                            {lineItems
-                                .filter(item => item.type === 'expense' && item.isLoan)
-                                .sort((a, b) => {
-                                    // Sort by loan title/name alphabetically
-                                    const nameA = a.loanTitle || a.name;
-                                    const nameB = b.loanTitle || b.name;
-                                    return nameA.localeCompare(nameB);
-                                })
-                                .map((item) => {
-                                    return (
-                                        <TableRow key={item.id}>
-                                            <TableCell
-                                                onClick={() => handleNameCellClick(item.id)}
-                                                sx={{
-                                                    color: theme.palette.info.main,
-                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                    padding: '12px 8px',
-                                                    cursor: 'pointer',
-                                                    bgcolor: theme.palette.background.paper,
-                                                    ...(isMobile && {
-                                                        position: 'sticky',
-                                                        left: 0,
-                                                        zIndex: 2,
-                                                    }),
-                                                    '&:hover': {
-                                                        bgcolor: theme.palette.background.default,
-                                                    },
-                                                }}
-                                            >
-                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    <AccountBalanceIcon
-                                                        sx={{
-                                                            fontSize: '1rem',
-                                                            color: theme.palette.info.main,
-                                                            opacity: 0.8
-                                                        }}
-                                                    />
-                                                    <span style={{ flex: 1 }}>
-                                                        {item.loanTitle || item.name}
-                                                    </span>
-                                                    {selectedItemForDelete === item.id && (
-                                                        <IconButton
-                                                            size="small"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteItem(item.id);
-                                                            }}
-                                                            sx={{
-                                                                color: theme.palette.info.main,
-                                                                padding: '4px',
-                                                                '&:hover': {
-                                                                    bgcolor: theme.palette.info.main,
-                                                                    color: theme.palette.info.contrastText,
+                                                                    bgcolor: theme.palette.error.main,
+                                                                    color: theme.palette.error.contrastText,
                                                                 },
                                                             }}
                                                         >
@@ -1631,8 +1155,8 @@ export default function Budget() {
                                                         onClick={() => handleCellClick(item.id, month)}
                                                         sx={{
                                                             color: theme.palette.text.primary,
-                                                            padding: '4px',
-                                                            fontSize: '0.875rem',
+                                                            padding: isMobile ? '4px 2px' : '4px',
+                                                            fontSize: isMobile ? '0.7rem' : '0.875rem',
                                                             cursor: 'pointer',
                                                             '&:hover': {
                                                                 bgcolor: theme.palette.background.default,
@@ -1672,274 +1196,784 @@ export default function Budget() {
                                                                 }}
                                                             />
                                                         ) : (
-                                                            formatCurrency(cellValue, currency)
+                                                            formatBudgetAmount(cellValue)
                                                         )}
                                                     </TableCell>
                                                 );
                                             })}
                                         </TableRow>
-                                    );
-                                })}
-                            {/* Fun Expenses Summary Row */}
-                            {(() => {
-                                const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
-                                if (staticExpenses.length === 0) return null;
+                                    ))}
+                                {/* Total Income Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={1}
+                                        sx={{
+                                            color: '#4caf50', // Bright green for total income
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: 'bold',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                            bgcolor: theme.palette.background.default,
+                                            ...(isMobile && {
+                                                position: 'sticky',
+                                                left: 0,
+                                                zIndex: 2,
+                                            }),
+                                        }}
+                                    >
+                                        Total Income
+                                    </TableCell>
+                                    {MONTHS.map((month) => {
+                                        const totalIncome = lineItems
+                                            .filter(item => item.type === 'income')
+                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
 
-                                return (
-                                    <TableRow>
-                                        <TableCell
-                                            sx={{
-                                                color: theme.palette.warning.main,
-                                                borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                                padding: '12px 8px',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                                ...(isMobile && {
-                                                    position: 'sticky',
-                                                    left: 0,
-                                                    zIndex: 2,
-                                                }),
-                                            }}
-                                        >
-                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                <LocalActivityIcon
-                                                    sx={{
-                                                        fontSize: '1rem',
-                                                        color: theme.palette.warning.main,
-                                                        opacity: 0.8
-                                                    }}
-                                                />
-                                                <span>Fun Expenses</span>
-                                            </Box>
-                                        </TableCell>
-                                        {MONTHS.map((month) => {
-                                            const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                            return (
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: '#4caf50', // Bright green for total income values
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(totalIncome)}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                                {/* Separator Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={13}
+                                        sx={{
+                                            padding: '24px 8px',
+                                            bgcolor: theme.palette.background.default,
+                                            borderTop: `2px solid ${theme.palette.secondary.main}`,
+                                            borderBottom: `2px solid ${theme.palette.secondary.main}`,
+                                        }}
+                                    />
+                                </TableRow>
+                                {/* Regular Expense Items */}
+                                {lineItems
+                                    .filter(item => item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !isNordnetItem(item))
+                                    .map((item) => {
+                                        return (
+                                            <TableRow
+                                                key={item.id}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                                onDragOver={(e) => handleDragOver(e, item.id)}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                                onDragEnd={handleDragEnd}
+                                                sx={{
+                                                    opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                    cursor: 'move',
+                                                    '&:hover': {
+                                                        bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                    },
+                                                }}
+                                            >
                                                 <TableCell
-                                                    key={month}
-                                                    align="center"
+                                                    onClick={() => handleNameCellClick(item.id)}
                                                     sx={{
-                                                        color: theme.palette.warning.main,
-                                                        padding: '12px 4px',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 'bold',
-                                                        bgcolor: theme.palette.background.default,
+                                                        color: item.linkedLoanId ? theme.palette.info.main : '#f44336', // Bright red for expenses
+                                                        fontWeight: 700,
+                                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                        padding: isMobile ? '6px 2px' : '12px 8px',
+                                                        cursor: 'pointer',
+                                                        fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                                        bgcolor: theme.palette.background.paper,
+                                                        maxWidth: isMobile ? '120px' : 'none',
+                                                        ...(isMobile && {
+                                                            position: 'sticky',
+                                                            left: 0,
+                                                            zIndex: 2,
+                                                        }),
+                                                        '&:hover': {
+                                                            bgcolor: 'transparent',
+                                                        },
                                                     }}
                                                 >
-                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: isMobile ? 0.5 : 1, minWidth: 0, width: '100%' }}>
+                                                        {selectedItemForDelete === item.id && item.type === 'expense' && !item.isLoan && !item.isStaticExpense && (
+                                                            <DragIndicatorIcon
+                                                                sx={{
+                                                                    color: theme.palette.text.secondary,
+                                                                    fontSize: '1.2rem',
+                                                                    cursor: 'grab',
+                                                                    flexShrink: 0,
+                                                                    '&:active': {
+                                                                        cursor: 'grabbing',
+                                                                    },
+                                                                }}
+                                                            />
+                                                        )}
+                                                        {item.linkedLoanId && (
+                                                            <AccountBalanceIcon
+                                                                sx={{
+                                                                    fontSize: '1rem',
+                                                                    color: theme.palette.info.main,
+                                                                    opacity: 0.8,
+                                                                    flexShrink: 0
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {item.name}
+                                                        </span>
+                                                        {item.category && isDesktop && (
+                                                            <Chip
+                                                                label={item.category}
+                                                                size="small"
+                                                                sx={{
+                                                                    fontSize: '0.7rem',
+                                                                    height: '24px',
+                                                                    bgcolor: theme.palette.background.default,
+                                                                    color: theme.palette.text.primary,
+                                                                    flexShrink: 0,
+                                                                    maxWidth: '100%',
+                                                                }}
+                                                            />
+                                                        )}
+                                                        {selectedItemForDelete === item.id && (
+                                                            <>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleOpenEditExpenseModal(item);
+                                                                    }}
+                                                                    sx={{
+                                                                        color: theme.palette.primary.main,
+                                                                        padding: '4px',
+                                                                        '&:hover': {
+                                                                            bgcolor: theme.palette.primary.main,
+                                                                            color: theme.palette.primary.contrastText,
+                                                                        },
+                                                                    }}
+                                                                    title="Edit Expense"
+                                                                >
+                                                                    <EditIcon fontSize="small" />
+                                                                </IconButton>
+                                                                <IconButton
+                                                                    size="small"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleDeleteItem(item.id);
+                                                                    }}
+                                                                    sx={{
+                                                                        color: item.linkedLoanId ? theme.palette.info.main : '#f44336',
+                                                                        padding: '4px',
+                                                                        '&:hover': {
+                                                                            bgcolor: item.linkedLoanId ? theme.palette.info.main : '#f44336',
+                                                                            color: item.linkedLoanId ? theme.palette.info.contrastText : theme.palette.primary.contrastText,
+                                                                        },
+                                                                    }}
+                                                                >
+                                                                    <DeleteIcon fontSize="small" />
+                                                                </IconButton>
+                                                            </>
+                                                        )}
+                                                    </Box>
                                                 </TableCell>
-                                            );
-                                        })}
-                                    </TableRow>
-                                );
-                            })()}
-                            {/* Total Expense Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={1}
-                                    sx={{
-                                        color: '#f44336', // Bright red for total expense
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontWeight: 'bold',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        bgcolor: theme.palette.background.default,
-                                        ...(isMobile && {
-                                            position: 'sticky',
-                                            left: 0,
-                                            zIndex: 2,
-                                        }),
-                                    }}
-                                >
-                                    Total Expense
-                                </TableCell>
-                                {MONTHS.map((month) => {
-                                    // Total expenses excluding Nordnet (Nordnet is savings, not an expense)
-                                    const totalExpense = lineItems
-                                        .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                        .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                                {MONTHS.map((month) => {
+                                                    const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                    const cellValue = getCellValue(item, month);
+
+                                                    return (
+                                                        <TableCell
+                                                            key={month}
+                                                            align="center"
+                                                            onClick={() => handleCellClick(item.id, month)}
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                padding: '4px',
+                                                                fontSize: '0.875rem',
+                                                                cursor: 'pointer',
+                                                                '&:hover': {
+                                                                    bgcolor: theme.palette.background.default,
+                                                                },
+                                                            }}
+                                                        >
+                                                            {isEditing ? (
+                                                                <TextField
+                                                                    value={editValue}
+                                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                                    onBlur={handleCellSave}
+                                                                    onKeyDown={handleCellKeyPress}
+                                                                    autoFocus
+                                                                    type="text"
+                                                                    size="small"
+                                                                    sx={{
+                                                                        width: '80px',
+                                                                        '& .MuiOutlinedInput-root': {
+                                                                            color: theme.palette.text.primary,
+                                                                            bgcolor: theme.palette.background.paper,
+                                                                            '& fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&:hover fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&.Mui-focused fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                    inputProps={{
+                                                                        style: {
+                                                                            textAlign: 'center',
+                                                                            padding: '4px 8px',
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                formatBudgetAmount(cellValue)
+                                                            )}
+                                                        </TableCell>
+                                                    );
+                                                })}
+                                            </TableRow>
+                                        );
+                                    })}
+                                {/* Nordnet Items (Stock Savings) */}
+                                {lineItems
+                                    .filter(item => isNordnetItem(item))
+                                    .map((item) => {
+                                        return (
+                                            <TableRow
+                                                key={item.id}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, item.id)}
+                                                onDragOver={(e) => handleDragOver(e, item.id)}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={(e) => handleDrop(e, item.id, 'expense')}
+                                                onDragEnd={handleDragEnd}
+                                                sx={{
+                                                    opacity: draggedItemId === item.id ? 0.5 : 1,
+                                                    bgcolor: dragOverItemId === item.id ? theme.palette.background.default : 'transparent',
+                                                    cursor: 'move',
+                                                    '&:hover': {
+                                                        bgcolor: dragOverItemId === item.id ? theme.palette.background.default : theme.palette.background.default + '80',
+                                                    },
+                                                }}
+                                            >
+                                                <TableCell
+                                                    onClick={() => handleNameCellClick(item.id)}
+                                                    sx={{
+                                                        color: '#9c27b0', // Purple color for Nordnet/stock savings
+                                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                        padding: isMobile ? '8px 4px' : '12px 8px',
+                                                        cursor: 'pointer',
+                                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                        bgcolor: theme.palette.background.paper,
+                                                        ...(isMobile && {
+                                                            position: 'sticky',
+                                                            left: 0,
+                                                            zIndex: 2,
+                                                        }),
+                                                        '&:hover': {
+                                                            bgcolor: 'transparent',
+                                                        },
+                                                    }}
+                                                >
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        {selectedItemForDelete === item.id && (
+                                                            <DragIndicatorIcon
+                                                                sx={{
+                                                                    color: theme.palette.text.secondary,
+                                                                    fontSize: '1.2rem',
+                                                                    cursor: 'grab',
+                                                                    '&:active': {
+                                                                        cursor: 'grabbing',
+                                                                    },
+                                                                }}
+                                                            />
+                                                        )}
+                                                        <TrendingUpIcon
+                                                            sx={{
+                                                                fontSize: '1rem',
+                                                                color: '#9c27b0',
+                                                                opacity: 0.9
+                                                            }}
+                                                        />
+                                                        <span style={{ flex: 1 }}>
+                                                            {item.name}
+                                                        </span>
+                                                        {selectedItemForDelete === item.id && (
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item.id);
+                                                                }}
+                                                                sx={{
+                                                                    color: '#9c27b0',
+                                                                    padding: '4px',
+                                                                    '&:hover': {
+                                                                        bgcolor: '#9c27b0',
+                                                                        color: theme.palette.primary.contrastText,
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <DeleteIcon />
+                                                            </IconButton>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                                {MONTHS.map((month) => {
+                                                    const cellValue = item.months[month] || 0;
+                                                    const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                    return (
+                                                        <TableCell
+                                                            key={month}
+                                                            onClick={() => !isEditing && handleCellClick(item.id, month)}
+                                                            align="center"
+                                                            sx={{
+                                                                color: '#9c27b0',
+                                                                padding: '8px 4px',
+                                                                cursor: isEditing ? 'default' : 'pointer',
+                                                                bgcolor: theme.palette.background.paper,
+                                                                fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                                '&:hover': {
+                                                                    bgcolor: isEditing ? 'transparent' : theme.palette.background.default,
+                                                                },
+                                                            }}
+                                                        >
+                                                            {isEditing ? (
+                                                                <TextField
+                                                                    value={editValue}
+                                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                                    onBlur={handleCellSave}
+                                                                    onKeyPress={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            handleCellSave();
+                                                                        } else if (e.key === 'Escape') {
+                                                                            setEditingCell(null);
+                                                                            setEditValue('');
+                                                                        }
+                                                                    }}
+                                                                    autoFocus
+                                                                    size="small"
+                                                                    inputProps={{
+                                                                        style: {
+                                                                            textAlign: 'center',
+                                                                            padding: '4px',
+                                                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                                        }
+                                                                    }}
+                                                                    sx={{
+                                                                        width: '100%',
+                                                                        '& .MuiOutlinedInput-root': {
+                                                                            '& fieldset': {
+                                                                                borderColor: '#9c27b0',
+                                                                            },
+                                                                            '&:hover fieldset': {
+                                                                                borderColor: '#9c27b0',
+                                                                            },
+                                                                            '&.Mui-focused fieldset': {
+                                                                                borderColor: '#9c27b0',
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                formatBudgetAmount(cellValue)
+                                                            )}
+                                                        </TableCell>
+                                                    );
+                                                })}
+                                            </TableRow>
+                                        );
+                                    })}
+                                {/* Loan Items */}
+                                {lineItems
+                                    .filter(item => item.type === 'expense' && item.isLoan)
+                                    .sort((a, b) => {
+                                        // Sort by loan title/name alphabetically
+                                        const nameA = a.loanTitle || a.name;
+                                        const nameB = b.loanTitle || b.name;
+                                        return nameA.localeCompare(nameB);
+                                    })
+                                    .map((item) => {
+                                        return (
+                                            <TableRow key={item.id}>
+                                                <TableCell
+                                                    onClick={() => handleNameCellClick(item.id)}
+                                                    sx={{
+                                                        color: theme.palette.info.main,
+                                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                        padding: '12px 8px',
+                                                        cursor: 'pointer',
+                                                        bgcolor: theme.palette.background.paper,
+                                                        ...(isMobile && {
+                                                            position: 'sticky',
+                                                            left: 0,
+                                                            zIndex: 2,
+                                                        }),
+                                                        '&:hover': {
+                                                            bgcolor: theme.palette.background.default,
+                                                        },
+                                                    }}
+                                                >
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <AccountBalanceIcon
+                                                            sx={{
+                                                                fontSize: '1rem',
+                                                                color: theme.palette.info.main,
+                                                                opacity: 0.8
+                                                            }}
+                                                        />
+                                                        <span style={{ flex: 1 }}>
+                                                            {item.loanTitle || item.name}
+                                                        </span>
+                                                        {selectedItemForDelete === item.id && (
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDeleteItem(item.id);
+                                                                }}
+                                                                sx={{
+                                                                    color: theme.palette.info.main,
+                                                                    padding: '4px',
+                                                                    '&:hover': {
+                                                                        bgcolor: theme.palette.info.main,
+                                                                        color: theme.palette.info.contrastText,
+                                                                    },
+                                                                }}
+                                                            >
+                                                                <DeleteIcon fontSize="small" />
+                                                            </IconButton>
+                                                        )}
+                                                    </Box>
+                                                </TableCell>
+                                                {MONTHS.map((month) => {
+                                                    const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
+                                                    const cellValue = getCellValue(item, month);
+
+                                                    return (
+                                                        <TableCell
+                                                            key={month}
+                                                            align="center"
+                                                            onClick={() => handleCellClick(item.id, month)}
+                                                            sx={{
+                                                                color: theme.palette.text.primary,
+                                                                padding: '4px',
+                                                                fontSize: '0.875rem',
+                                                                cursor: 'pointer',
+                                                                '&:hover': {
+                                                                    bgcolor: theme.palette.background.default,
+                                                                },
+                                                            }}
+                                                        >
+                                                            {isEditing ? (
+                                                                <TextField
+                                                                    value={editValue}
+                                                                    onChange={(e) => setEditValue(e.target.value)}
+                                                                    onBlur={handleCellSave}
+                                                                    onKeyDown={handleCellKeyPress}
+                                                                    autoFocus
+                                                                    type="text"
+                                                                    size="small"
+                                                                    sx={{
+                                                                        width: '80px',
+                                                                        '& .MuiOutlinedInput-root': {
+                                                                            color: theme.palette.text.primary,
+                                                                            bgcolor: theme.palette.background.paper,
+                                                                            '& fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&:hover fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                            '&.Mui-focused fieldset': {
+                                                                                borderColor: theme.palette.primary.main,
+                                                                            },
+                                                                        },
+                                                                    }}
+                                                                    inputProps={{
+                                                                        style: {
+                                                                            textAlign: 'center',
+                                                                            padding: '4px 8px',
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                formatBudgetAmount(cellValue)
+                                                            )}
+                                                        </TableCell>
+                                                    );
+                                                })}
+                                            </TableRow>
+                                        );
+                                    })}
+                                {/* Fun Expenses Summary Row */}
+                                {(() => {
+                                    const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
+                                    if (staticExpenses.length === 0) return null;
 
                                     return (
-                                        <TableCell
-                                            key={month}
-                                            align="center"
-                                            sx={{
-                                                color: '#f44336', // Bright red for total expense values
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                            }}
-                                        >
-                                            {totalExpense === 0 ? '-' : formatCurrency(totalExpense, currency)}
-                                        </TableCell>
+                                        <TableRow>
+                                            <TableCell
+                                                sx={{
+                                                    color: theme.palette.warning.main,
+                                                    borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                                    padding: '12px 8px',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                    ...(isMobile && {
+                                                        position: 'sticky',
+                                                        left: 0,
+                                                        zIndex: 2,
+                                                    }),
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <LocalActivityIcon
+                                                        sx={{
+                                                            fontSize: '1rem',
+                                                            color: theme.palette.warning.main,
+                                                            opacity: 0.8
+                                                        }}
+                                                    />
+                                                    <span>Fun Expenses</span>
+                                                </Box>
+                                            </TableCell>
+                                            {MONTHS.map((month) => {
+                                                const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                                return (
+                                                    <TableCell
+                                                        key={month}
+                                                        align="center"
+                                                        sx={{
+                                                            color: theme.palette.warning.main,
+                                                            padding: '12px 4px',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 'bold',
+                                                            bgcolor: theme.palette.background.default,
+                                                        }}
+                                                    >
+                                                        {formatBudgetAmount(totalStaticExpense)}
+                                                    </TableCell>
+                                                );
+                                            })}
+                                        </TableRow>
                                     );
-                                })}
-                            </TableRow>
-                            {/* Separator Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={13}
-                                    sx={{
-                                        padding: '24px 8px',
-                                        bgcolor: theme.palette.background.default,
-                                        borderTop: `2px solid ${theme.palette.secondary.main}`,
-                                        borderBottom: `2px solid ${theme.palette.secondary.main}`,
-                                    }}
-                                />
-                            </TableRow>
-                            {/* Savings Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={1}
-                                    sx={{
-                                        color: theme.palette.info.main,
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontWeight: 'bold',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        bgcolor: theme.palette.background.default,
-                                        ...(isMobile && {
-                                            position: 'sticky',
-                                            left: 0,
-                                            zIndex: 2,
-                                        }),
-                                    }}
-                                >
-                                    Savings
-                                </TableCell>
-                                {MONTHS.map((month) => {
-                                    // Calculate income (all income items)
-                                    const totalIncome = lineItems
-                                        .filter(item => item.type === 'income')
-                                        .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                    // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
-                                    const totalExpense = lineItems
-                                        .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                        .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                    // Savings = Income - Expenses (Nordnet excluded)
-                                    const savings = totalIncome - totalExpense;
+                                })()}
+                                {/* Total Expense Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={1}
+                                        sx={{
+                                            color: '#f44336', // Bright red for total expense
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: 'bold',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                            bgcolor: theme.palette.background.default,
+                                            ...(isMobile && {
+                                                position: 'sticky',
+                                                left: 0,
+                                                zIndex: 2,
+                                            }),
+                                        }}
+                                    >
+                                        Total Expense
+                                    </TableCell>
+                                    {MONTHS.map((month) => {
+                                        // Total expenses excluding Nordnet (Nordnet is savings, not an expense)
+                                        const totalExpense = lineItems
+                                            .filter(item => item.type === 'expense' && !isNordnetItem(item))
+                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
 
-                                    return (
-                                        <TableCell
-                                            key={month}
-                                            align="center"
-                                            sx={{
-                                                color: savings >= 0 ? theme.palette.success.main : theme.palette.error.main,
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                            }}
-                                        >
-                                            {savings === 0 ? '-' : formatCurrency(savings, currency)}
-                                        </TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                            {/* Cumulative Savings Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={1}
-                                    sx={{
-                                        color: theme.palette.info.main,
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontWeight: 'bold',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        bgcolor: theme.palette.background.default,
-                                        ...(isMobile && {
-                                            position: 'sticky',
-                                            left: 0,
-                                            zIndex: 2,
-                                        }),
-                                    }}
-                                >
-                                    Cumulative Savings
-                                </TableCell>
-                                {MONTHS.map((month, monthIndex) => {
-                                    let cumulativeSavings = 0;
-                                    for (let i = 0; i <= monthIndex; i++) {
-                                        const currentMonth = MONTHS[i];
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: '#f44336', // Bright red for total expense values
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(totalExpense)}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                                {/* Separator Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={13}
+                                        sx={{
+                                            padding: '24px 8px',
+                                            bgcolor: theme.palette.background.default,
+                                            borderTop: `2px solid ${theme.palette.secondary.main}`,
+                                            borderBottom: `2px solid ${theme.palette.secondary.main}`,
+                                        }}
+                                    />
+                                </TableRow>
+                                {/* Savings Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={1}
+                                        sx={{
+                                            color: theme.palette.info.main,
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: 'bold',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                            bgcolor: theme.palette.background.default,
+                                            ...(isMobile && {
+                                                position: 'sticky',
+                                                left: 0,
+                                                zIndex: 2,
+                                            }),
+                                        }}
+                                    >
+                                        Savings
+                                    </TableCell>
+                                    {MONTHS.map((month) => {
                                         // Calculate income (all income items)
                                         const totalIncome = lineItems
                                             .filter(item => item.type === 'income')
-                                            .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
+                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
                                         // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
                                         const totalExpense = lineItems
                                             .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                            .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
-                                        // Cumulative Savings = Income - Expenses (Nordnet excluded)
-                                        cumulativeSavings += totalIncome - totalExpense;
-                                    }
+                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                        // Savings = Income - Expenses (Nordnet excluded)
+                                        const savings = totalIncome - totalExpense;
 
-                                    return (
-                                        <TableCell
-                                            key={month}
-                                            align="center"
-                                            sx={{
-                                                color: cumulativeSavings >= 0 ? theme.palette.success.main : theme.palette.error.main,
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                            }}
-                                        >
-                                            {cumulativeSavings === 0 ? '-' : formatCurrency(cumulativeSavings, currency)}
-                                        </TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                            {/* Nordnet Savings Row */}
-                            <TableRow>
-                                <TableCell
-                                    colSpan={1}
-                                    sx={{
-                                        color: theme.palette.info.main,
-                                        borderRight: `1px solid ${theme.palette.secondary.main}`,
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontWeight: 'bold',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        bgcolor: theme.palette.background.default,
-                                        ...(isMobile && {
-                                            position: 'sticky',
-                                            left: 0,
-                                            zIndex: 2,
-                                        }),
-                                    }}
-                                >
-                                    Nordnet Savings
-                                </TableCell>
-                                {MONTHS.map((month, monthIndex) => {
-                                    let cumulativeNordnetSavings = 0;
-                                    for (let i = 0; i <= monthIndex; i++) {
-                                        const currentMonth = MONTHS[i];
-                                        const nordnetExpense = lineItems
-                                            .filter(item => isNordnetItem(item))
-                                            .reduce((sum, item) => sum + Math.abs(item.months[currentMonth] || 0), 0);
-                                        // Nordnet expenses are actually savings, so we treat them as positive savings
-                                        cumulativeNordnetSavings += nordnetExpense;
-                                    }
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: savings >= 0 ? theme.palette.success.main : theme.palette.error.main,
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(savings)}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                                {/* Cumulative Savings Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={1}
+                                        sx={{
+                                            color: theme.palette.info.main,
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: 'bold',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                            bgcolor: theme.palette.background.default,
+                                            ...(isMobile && {
+                                                position: 'sticky',
+                                                left: 0,
+                                                zIndex: 2,
+                                            }),
+                                        }}
+                                    >
+                                        Cumulative Savings
+                                    </TableCell>
+                                    {MONTHS.map((month, monthIndex) => {
+                                        let cumulativeSavings = 0;
+                                        for (let i = 0; i <= monthIndex; i++) {
+                                            const currentMonth = MONTHS[i];
+                                            // Calculate income (all income items)
+                                            const totalIncome = lineItems
+                                                .filter(item => item.type === 'income')
+                                                .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
+                                            // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
+                                            const totalExpense = lineItems
+                                                .filter(item => item.type === 'expense' && !isNordnetItem(item))
+                                                .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
+                                            // Cumulative Savings = Income - Expenses (Nordnet excluded)
+                                            cumulativeSavings += totalIncome - totalExpense;
+                                        }
 
-                                    return (
-                                        <TableCell
-                                            key={month}
-                                            align="center"
-                                            sx={{
-                                                color: cumulativeNordnetSavings >= 0 ? theme.palette.success.main : theme.palette.error.main,
-                                                padding: '12px 4px',
-                                                fontSize: '0.875rem',
-                                                fontWeight: 'bold',
-                                                bgcolor: theme.palette.background.default,
-                                                opacity: 0.8,
-                                            }}
-                                        >
-                                            {cumulativeNordnetSavings === 0 ? '-' : formatCurrency(cumulativeNordnetSavings, currency)}
-                                        </TableCell>
-                                    );
-                                })}
-                            </TableRow>
-                        </TableBody>
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: cumulativeSavings >= 0 ? theme.palette.success.main : theme.palette.error.main,
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(cumulativeSavings)}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                                {/* Nordnet Savings Row */}
+                                <TableRow>
+                                    <TableCell
+                                        colSpan={1}
+                                        sx={{
+                                            color: theme.palette.info.main,
+                                            borderRight: `1px solid ${theme.palette.secondary.main}`,
+                                            padding: isMobile ? '8px 4px' : '12px 8px',
+                                            fontWeight: 'bold',
+                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                            bgcolor: theme.palette.background.default,
+                                            ...(isMobile && {
+                                                position: 'sticky',
+                                                left: 0,
+                                                zIndex: 2,
+                                            }),
+                                        }}
+                                    >
+                                        Nordnet Savings
+                                    </TableCell>
+                                    {MONTHS.map((month, monthIndex) => {
+                                        let cumulativeNordnetSavings = 0;
+                                        for (let i = 0; i <= monthIndex; i++) {
+                                            const currentMonth = MONTHS[i];
+                                            const nordnetExpense = lineItems
+                                                .filter(item => isNordnetItem(item))
+                                                .reduce((sum, item) => sum + Math.abs(item.months[currentMonth] || 0), 0);
+                                            // Nordnet expenses are actually savings, so we treat them as positive savings
+                                            cumulativeNordnetSavings += nordnetExpense;
+                                        }
+
+                                        return (
+                                            <TableCell
+                                                key={month}
+                                                align="center"
+                                                sx={{
+                                                    color: cumulativeNordnetSavings >= 0 ? theme.palette.success.main : theme.palette.error.main,
+                                                    padding: '12px 4px',
+                                                    fontSize: '0.875rem',
+                                                    fontWeight: 'bold',
+                                                    bgcolor: theme.palette.background.default,
+                                                    opacity: 0.8,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(cumulativeNordnetSavings)}
+                                            </TableCell>
+                                        );
+                                    })}
+                                </TableRow>
+                            </TableBody>
                         </Table>
                     </Paper>
                 </Collapse>
@@ -2206,7 +2240,7 @@ export default function Budget() {
                                                                     }}
                                                                 />
                                                             ) : (
-                                                                formatCurrency(cellValue, currency)
+                                                                formatBudgetAmount(cellValue)
                                                             )}
                                                         </TableCell>
                                                     );
@@ -2250,7 +2284,7 @@ export default function Budget() {
                                                         bgcolor: theme.palette.background.default,
                                                     }}
                                                 >
-                                                    {totalIncome === 0 ? '-' : formatCurrency(totalIncome, currency)}
+                                                    {formatBudgetAmount(totalIncome)}
                                                 </TableCell>
                                             );
                                         })}
@@ -2423,7 +2457,7 @@ export default function Budget() {
                                                                         }}
                                                                     />
                                                                 ) : (
-                                                                    formatCurrency(cellValue, currency)
+                                                                    formatBudgetAmount(cellValue)
                                                                 )}
                                                             </TableCell>
                                                         );
@@ -2548,7 +2582,7 @@ export default function Budget() {
                                                     {month}
                                                 </Typography>
                                                 <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold' }}>
-                                                    {formatCurrency(monthTotal, currency)} ({monthExpenses.length})
+                                                    {formatBudgetAmount(monthTotal)} ({monthExpenses.length})
                                                 </Typography>
                                             </AccordionSummary>
                                             <AccordionDetails sx={{ padding: '1rem', paddingTop: '0.5rem' }}>
@@ -2697,7 +2731,7 @@ export default function Budget() {
                                                                             </Typography>
                                                                         </Box>
                                                                         <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: isMobile ? '60px' : '80px', textAlign: 'right', flexShrink: 0 }}>
-                                                                            {formatCurrency(item.staticExpensePrice || 0, currency)}
+                                                                            {formatBudgetAmount(item.staticExpensePrice || 0)}
                                                                         </Typography>
                                                                         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                                                                             <IconButton
@@ -3172,25 +3206,27 @@ export default function Budget() {
                                                             color: typicalMixScoreColor,
                                                         }}
                                                     >
-                                                        {insights.benchmarkSimilarityScore}
+                                                        {hideBudgetNumbers ? '••' : insights.benchmarkSimilarityScore}
                                                         <Typography component="span" sx={{ fontSize: '0.45em', fontWeight: 600, color: theme.palette.text.secondary, ml: 0.25 }}>
                                                             /100
                                                         </Typography>
                                                     </Typography>
-                                                    <LinearProgress
-                                                        variant="determinate"
-                                                        value={insights.benchmarkSimilarityScore}
-                                                        sx={{
-                                                            mt: 1,
-                                                            height: 8,
-                                                            borderRadius: 1,
-                                                            bgcolor: theme.palette.background.paper,
-                                                            '& .MuiLinearProgress-bar': {
+                                                    {!hideBudgetNumbers && (
+                                                        <LinearProgress
+                                                            variant="determinate"
+                                                            value={insights.benchmarkSimilarityScore}
+                                                            sx={{
+                                                                mt: 1,
+                                                                height: 8,
                                                                 borderRadius: 1,
-                                                                bgcolor: typicalMixScoreColor,
-                                                            },
-                                                        }}
-                                                    />
+                                                                bgcolor: theme.palette.background.paper,
+                                                                '& .MuiLinearProgress-bar': {
+                                                                    borderRadius: 1,
+                                                                    bgcolor: typicalMixScoreColor,
+                                                                },
+                                                            }}
+                                                        />
+                                                    )}
                                                 </Box>
                                             )}
                                         </Box>
@@ -3203,7 +3239,7 @@ export default function Budget() {
                                                 Total Income
                                             </Typography>
                                             <Typography sx={{ color: '#4caf50', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
-                                                {formatCurrency(insights.totalIncome, currency)}
+                                                {formatBudgetAmount(insights.totalIncome)}
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
@@ -3211,7 +3247,7 @@ export default function Budget() {
                                                 Total Expenses
                                             </Typography>
                                             <Typography sx={{ color: '#f44336', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
-                                                {formatCurrency(insights.totalExpense, currency)}
+                                                {formatBudgetAmount(insights.totalExpense)}
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
@@ -3224,7 +3260,7 @@ export default function Budget() {
                                                 fontWeight: 'bold',
                                                 mt: 0.5
                                             }}>
-                                                {formatCurrency(insights.totalSavings, currency)}
+                                                {formatBudgetAmount(insights.totalSavings)}
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
@@ -3237,7 +3273,7 @@ export default function Budget() {
                                                 fontWeight: 'bold',
                                                 mt: 0.5
                                             }}>
-                                                {insights.savingsRate.toFixed(1)}%
+                                                {formatBudgetPercent(insights.savingsRate)}%
                                             </Typography>
                                         </Paper>
                                     </Box>
@@ -3353,7 +3389,7 @@ export default function Budget() {
                                                                     textAlign: 'center',
                                                                     lineHeight: 1.2
                                                                 }}>
-                                                                    {formatCurrency(data.income, currency).replace(/\s/g, '')}
+                                                                    {formatBudgetAmount(data.income).replace(/\s/g, '')}
                                                                 </Typography>
                                                                 <Typography sx={{
                                                                     fontSize: isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
@@ -3362,7 +3398,7 @@ export default function Budget() {
                                                                     textAlign: 'center',
                                                                     lineHeight: 1.2
                                                                 }}>
-                                                                    {formatCurrency(data.expense, currency).replace(/\s/g, '')}
+                                                                    {formatBudgetAmount(data.expense).replace(/\s/g, '')}
                                                                 </Typography>
                                                                 <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.3, justifyContent: 'center', mt: 0.25 }}>
                                                                     <Typography sx={{
@@ -3372,7 +3408,7 @@ export default function Budget() {
                                                                         textAlign: 'center',
                                                                         lineHeight: 1.2,
                                                                     }}>
-                                                                        {formatCurrency(savings, currency).replace(/\s/g, '')}
+                                                                        {formatBudgetAmount(savings).replace(/\s/g, '')}
                                                                     </Typography>
                                                                     {data.income > 0 && (
                                                                         <Typography sx={{
@@ -3383,7 +3419,7 @@ export default function Budget() {
                                                                             lineHeight: 1.2,
                                                                             opacity: 0.8
                                                                         }}>
-                                                                            ({savings >= 0 ? '+' : ''}{((savings / data.income) * 100).toFixed(1)}%)
+                                                                            ({savings >= 0 ? '+' : ''}{formatBudgetPercent((savings / data.income) * 100)}%)
                                                                         </Typography>
                                                                     )}
                                                                 </Box>
@@ -3536,7 +3572,7 @@ export default function Budget() {
                                                             Total
                                                         </Typography>
                                                         <Typography sx={{ fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem', fontWeight: 'bold', color: theme.palette.warning.main }}>
-                                                            {formatCurrency(insights.totalFunExpenses, currency)}
+                                                            {formatBudgetAmount(insights.totalFunExpenses)}
                                                         </Typography>
                                                     </Box>
                                                 </Box>
@@ -3621,7 +3657,7 @@ export default function Budget() {
                                                                             color: theme.palette.text.secondary,
                                                                             whiteSpace: 'nowrap'
                                                                         }}>
-                                                                            {percentage.toFixed(1)}%
+                                                                            {formatBudgetPercent(percentage)}%
                                                                         </Typography>
                                                                         <Typography sx={{
                                                                             fontSize: isMobile ? '0.7rem' : isTablet ? '0.75rem' : '0.875rem',
@@ -3629,7 +3665,7 @@ export default function Budget() {
                                                                             color: theme.palette.warning.main,
                                                                             whiteSpace: 'nowrap'
                                                                         }}>
-                                                                            {formatCurrency(item.amount, currency)}
+                                                                            {formatBudgetAmount(item.amount)}
                                                                         </Typography>
                                                                     </Box>
                                                                 </Box>
@@ -3659,10 +3695,10 @@ export default function Budget() {
                                                                 </Typography>
                                                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                                                     <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
-                                                                        {percentage.toFixed(1)}%
+                                                                        {formatBudgetPercent(percentage)}%
                                                                     </Typography>
                                                                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#f44336', minWidth: '80px', textAlign: 'right' }}>
-                                                                        {formatCurrency(item.amount, currency)}
+                                                                        {formatBudgetAmount(item.amount)}
                                                                     </Typography>
                                                                 </Box>
                                                             </Box>
@@ -3700,7 +3736,7 @@ export default function Budget() {
                                                         Monthly Income
                                                     </Typography>
                                                     <Typography sx={{ color: '#4caf50', fontWeight: 'bold' }}>
-                                                        {formatCurrency(insights.averageMonthlyIncome, currency)}
+                                                        {formatBudgetAmount(insights.averageMonthlyIncome)}
                                                     </Typography>
                                                 </Box>
                                                 <Box>
@@ -3708,7 +3744,7 @@ export default function Budget() {
                                                         Monthly Expense
                                                     </Typography>
                                                     <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
-                                                        {formatCurrency(insights.averageMonthlyExpense, currency)}
+                                                        {formatBudgetAmount(insights.averageMonthlyExpense)}
                                                     </Typography>
                                                 </Box>
                                                 <Box>
@@ -3719,7 +3755,7 @@ export default function Budget() {
                                                         color: insights.averageMonthlySavings >= 0 ? '#4caf50' : '#f44336',
                                                         fontWeight: 'bold'
                                                     }}>
-                                                        {formatCurrency(insights.averageMonthlySavings, currency)}
+                                                        {formatBudgetAmount(insights.averageMonthlySavings)}
                                                     </Typography>
                                                 </Box>
                                             </Box>
@@ -3734,7 +3770,7 @@ export default function Budget() {
                                                         Best Month
                                                     </Typography>
                                                     <Typography sx={{ color: '#4caf50', fontWeight: 'bold' }}>
-                                                        {insights.bestMonth.month}: {formatCurrency(insights.bestMonth.savings, currency)}
+                                                        {insights.bestMonth.month}: {formatBudgetAmount(insights.bestMonth.savings)}
                                                     </Typography>
                                                 </Box>
                                                 <Box>
@@ -3742,7 +3778,7 @@ export default function Budget() {
                                                         Worst Month
                                                     </Typography>
                                                     <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
-                                                        {insights.worstMonth.month}: {formatCurrency(insights.worstMonth.savings, currency)}
+                                                        {insights.worstMonth.month}: {formatBudgetAmount(insights.worstMonth.savings)}
                                                     </Typography>
                                                 </Box>
                                                 {insights.totalNordnetSavings > 0 && (
@@ -3751,7 +3787,7 @@ export default function Budget() {
                                                             Nordnet Savings
                                                         </Typography>
                                                         <Typography sx={{ color: '#9c27b0', fontWeight: 'bold' }}>
-                                                            {formatCurrency(insights.totalNordnetSavings, currency)}
+                                                            {formatBudgetAmount(insights.totalNordnetSavings)}
                                                         </Typography>
                                                     </Box>
                                                 )}
