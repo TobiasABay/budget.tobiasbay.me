@@ -14,7 +14,9 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import DownloadIcon from '@mui/icons-material/Download';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import * as XLSX from 'xlsx';
-import { getStoredCurrency, setStoredCurrency, CURRENCIES } from "../utils/currency";
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { getStoredCurrency, setStoredCurrency, CURRENCIES, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
 interface Loan {
@@ -30,6 +32,24 @@ interface Loan {
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
 const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
+
+const BUDGET_REPORT_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+function isNordnetBudgetItem(item: { type?: string; name?: string }): boolean {
+  return item.type === 'expense' && String(item.name || '').toLowerCase().trim().includes('nordnet');
+}
+
+function formatPdfMoney(amount: number, currency: Currency): string {
+  if (amount === 0) {
+    if (currency.code === 'NONE') return '0';
+    if (currency.code === 'JPY') return `${currency.symbol}0`;
+    return `${currency.symbol}0`;
+  }
+  return formatCurrency(amount, currency) || String(amount);
+}
 
 async function fetchBudgets(userId: string): Promise<string[]> {
   const response = await fetch(`${API_BASE_URL}/budgets`, {
@@ -173,6 +193,7 @@ export default function SettingsPage() {
   const [activeBudget, setActiveBudget] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<boolean>(false);
   const [downloadingExcel, setDownloadingExcel] = useState<boolean>(false);
+  const [downloadingBudgetYear, setDownloadingBudgetYear] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -687,6 +708,142 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDownloadBudgetReport = async (year: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!user?.id) return;
+
+    setDownloadingBudgetYear(year);
+    setError('');
+
+    try {
+      const encodedYear = encodeURIComponent(year);
+      const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': user.id,
+        },
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to load budget';
+        try {
+          const err = await response.json();
+          message = err.error || message;
+        } catch {
+          message = response.statusText || message;
+        }
+        throw new Error(message);
+      }
+
+      const items: any[] = await response.json();
+      const currencyObj = getStoredCurrency();
+
+      const monthlyRows = BUDGET_REPORT_MONTHS.map((month) => {
+        const income = items
+          .filter((i: any) => i.type === 'income')
+          .reduce((sum: number, i: any) => sum + (Number(i.months?.[month]) || 0), 0);
+        const expenses = items
+          .filter((i: any) => i.type === 'expense' && !isNordnetBudgetItem(i))
+          .reduce((sum: number, i: any) => sum + (Number(i.months?.[month]) || 0), 0);
+        return { month, income, expenses, net: income - expenses };
+      });
+
+      const totalIncome = monthlyRows.reduce((s, r) => s + r.income, 0);
+      const totalExpenses = monthlyRows.reduce((s, r) => s + r.expenses, 0);
+      const totalNet = totalIncome - totalExpenses;
+      const savingsRatePct = totalIncome > 0 ? (totalNet / totalIncome) * 100 : 0;
+
+      const incomeLines = items.filter((i: any) => i.type === 'income').length;
+      const expenseLines = items.filter((i: any) => i.type === 'expense').length;
+
+      const expensesByCategory: Record<string, number> = {};
+      items
+        .filter((i: any) => i.type === 'expense' && !isNordnetBudgetItem(i))
+        .forEach((item: any) => {
+          const cat = (item.category && String(item.category).trim()) || 'Other';
+          BUDGET_REPORT_MONTHS.forEach((m) => {
+            expensesByCategory[cat] = (expensesByCategory[cat] || 0) + (Number(item.months?.[m]) || 0);
+          });
+        });
+      const categoryRows = Object.entries(expensesByCategory)
+        .filter(([, amt]) => amt > 0)
+        .sort((a, b) => b[1] - a[1]);
+
+      const doc = new jsPDF();
+      const margin = 14;
+      let cursorY = 18;
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`Budget overview: ${year}`, margin, cursorY);
+      cursorY += 7;
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(90, 90, 90);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, margin, cursorY);
+      cursorY += 5;
+      doc.text(`Currency: ${currencyObj.name} (${currencyObj.code})`, margin, cursorY);
+      cursorY += 5;
+      doc.text(`Line items: ${items.length} (${incomeLines} income, ${expenseLines} expense)`, margin, cursorY);
+      doc.setTextColor(0, 0, 0);
+
+      autoTable(doc, {
+        startY: cursorY + 6,
+        head: [['Summary', 'Annual total']],
+        body: [
+          ['Total income', formatPdfMoney(totalIncome, currencyObj)],
+          ['Total expenses (excl. Nordnet-style savings lines)', formatPdfMoney(totalExpenses, currencyObj)],
+          ['Net', formatPdfMoney(totalNet, currencyObj)],
+          ...(totalIncome > 0
+            ? [['Savings rate (net / income)', `${savingsRatePct.toFixed(1)}%`]]
+            : []),
+        ],
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [66, 66, 66], fontStyle: 'bold' },
+        margin: { left: margin, right: margin },
+      });
+
+      const afterSummary = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+      autoTable(doc, {
+        startY: afterSummary + 12,
+        head: [['Month', 'Income', 'Expenses', 'Net']],
+        body: monthlyRows.map((r) => [
+          r.month.slice(0, 3),
+          formatPdfMoney(r.income, currencyObj),
+          formatPdfMoney(r.expenses, currencyObj),
+          formatPdfMoney(r.net, currencyObj),
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 66, 66], fontStyle: 'bold' },
+        margin: { left: margin, right: margin },
+      });
+
+      const afterMonthly = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+      if (categoryRows.length > 0) {
+        autoTable(doc, {
+          startY: afterMonthly + 12,
+          head: [['Expense category', 'Annual spend']],
+          body: categoryRows.map(([cat, amt]) => [cat, formatPdfMoney(amt, currencyObj)]),
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [66, 66, 66], fontStyle: 'bold' },
+          margin: { left: margin, right: margin },
+        });
+      }
+
+      const timestamp = new Date().toISOString().split('T')[0];
+      doc.save(`budget-overview-${year}-${timestamp}.pdf`);
+    } catch (err) {
+      console.error('Error downloading budget PDF:', err);
+      setError(err instanceof Error ? err.message : 'Failed to download budget PDF. Please try again.');
+    } finally {
+      setDownloadingBudgetYear(null);
+    }
+  };
+
   return (
     <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
       <Navbar />
@@ -970,6 +1127,27 @@ export default function SettingsPage() {
                               }}
                             />
                           </Box>
+                          <IconButton
+                            edge="end"
+                            title="Download PDF overview"
+                            onClick={(e) => handleDownloadBudgetReport(year, e)}
+                            disabled={!isLoaded || !user?.id || downloadingBudgetYear !== null}
+                            sx={{
+                              color: theme.palette.info.main,
+                              '&:hover': {
+                                bgcolor: theme.palette.info.main,
+                                color: theme.palette.info.contrastText || theme.palette.text.primary,
+                                transform: 'scale(1.1)',
+                              },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {downloadingBudgetYear === year ? (
+                              <CircularProgress size={22} sx={{ color: theme.palette.info.main }} />
+                            ) : (
+                              <DownloadIcon />
+                            )}
+                          </IconButton>
                           <IconButton
                             edge="end"
                             onClick={(e) => {

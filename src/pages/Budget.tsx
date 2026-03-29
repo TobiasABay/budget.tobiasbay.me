@@ -1680,7 +1680,6 @@ export default function Budget() {
                                         </TableCell>
                                         {MONTHS.map((month) => {
                                             const totalStaticExpense = staticExpenses.reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                            const buyCount = staticExpenses.filter(item => (item.months[month] || 0) > 0).length;
                                             return (
                                                 <TableCell
                                                     key={month}
@@ -1693,9 +1692,7 @@ export default function Budget() {
                                                         bgcolor: theme.palette.background.default,
                                                     }}
                                                 >
-                                                    {totalStaticExpense === 0
-                                                        ? '-'
-                                                        : `${formatCurrency(totalStaticExpense, currency)} (${buyCount})`}
+                                                    {totalStaticExpense === 0 ? '-' : formatCurrency(totalStaticExpense, currency)}
                                                 </TableCell>
                                             );
                                         })}
@@ -3111,8 +3108,8 @@ export default function Budget() {
                                                                 insights.benchmarkSimilarityScore >= 75
                                                                     ? theme.palette.success.main
                                                                     : insights.benchmarkSimilarityScore >= 50
-                                                                      ? theme.palette.info.main
-                                                                      : theme.palette.warning.main,
+                                                                        ? theme.palette.info.main
+                                                                        : theme.palette.warning.main,
                                                         }}
                                                     >
                                                         {insights.benchmarkSimilarityScore}
@@ -3134,8 +3131,8 @@ export default function Budget() {
                                                                     insights.benchmarkSimilarityScore >= 75
                                                                         ? theme.palette.success.main
                                                                         : insights.benchmarkSimilarityScore >= 50
-                                                                          ? theme.palette.info.main
-                                                                          : theme.palette.warning.main,
+                                                                            ? theme.palette.info.main
+                                                                            : theme.palette.warning.main,
                                                             },
                                                         }}
                                                     />
