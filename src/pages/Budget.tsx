@@ -72,6 +72,18 @@ function cosineSimilarity01(a: number[], b: number[]): number {
     return Math.min(1, Math.max(0, dot / denom));
 }
 
+/** Distinct colors from high match (green) to low (red). */
+function getTypicalMixScoreColor(score: number): string {
+    if (score >= 85) return '#4CAF50';
+    if (score >= 72) return '#66BB6A';
+    if (score >= 60) return '#26A69A';
+    if (score >= 48) return '#29B6F6';
+    if (score >= 36) return '#42A5F5';
+    if (score >= 24) return '#FFA726';
+    if (score >= 12) return '#FF7043';
+    return '#eb2352';
+}
+
 interface LineItem {
     id: string;
     name: string;
@@ -3073,6 +3085,10 @@ export default function Budget() {
                                 ...insights.monthlyData.map(m => Math.max(m.income, m.expense, m.savings)),
                                 1
                             );
+                            const typicalMixScoreColor =
+                                insights.benchmarkSimilarityScore != null
+                                    ? getTypicalMixScoreColor(insights.benchmarkSimilarityScore)
+                                    : undefined;
 
                             return (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
@@ -3104,12 +3120,7 @@ export default function Budget() {
                                                             fontSize: isMobile ? '2rem' : '2.5rem',
                                                             fontWeight: 800,
                                                             lineHeight: 1.1,
-                                                            color:
-                                                                insights.benchmarkSimilarityScore >= 75
-                                                                    ? theme.palette.success.main
-                                                                    : insights.benchmarkSimilarityScore >= 50
-                                                                        ? theme.palette.info.main
-                                                                        : theme.palette.warning.main,
+                                                            color: typicalMixScoreColor,
                                                         }}
                                                     >
                                                         {insights.benchmarkSimilarityScore}
@@ -3127,12 +3138,7 @@ export default function Budget() {
                                                             bgcolor: theme.palette.background.paper,
                                                             '& .MuiLinearProgress-bar': {
                                                                 borderRadius: 1,
-                                                                bgcolor:
-                                                                    insights.benchmarkSimilarityScore >= 75
-                                                                        ? theme.palette.success.main
-                                                                        : insights.benchmarkSimilarityScore >= 50
-                                                                            ? theme.palette.info.main
-                                                                            : theme.palette.warning.main,
+                                                                bgcolor: typicalMixScoreColor,
                                                             },
                                                         }}
                                                     />
