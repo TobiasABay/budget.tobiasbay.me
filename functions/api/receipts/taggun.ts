@@ -1,7 +1,9 @@
 /// <reference types="@cloudflare/workers-types" />
 
 // POST /api/receipts/taggun — multipart form field `file` → Taggun verbose OCR (line items).
-// Configure: `npx wrangler secret put TAGGUN_API_KEY` (production) or `.dev.vars` locally.
+// Production: Dashboard → Workers & Pages → project → Settings → Variables and Secrets (Production) → Secret TAGGUN_API_KEY, then redeploy.
+// CLI: npx wrangler pages secret put TAGGUN_API_KEY --project-name <project>
+// Local: .dev.vars
 
 const TAGGUN_VERBOSE_URL = 'https://api.taggun.io/api/receipt/v1/verbose/file';
 
@@ -47,7 +49,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     return new Response(
       JSON.stringify({
         error:
-          'Receipt scanning is not configured. Set TAGGUN_API_KEY (e.g. wrangler secret put TAGGUN_API_KEY).',
+          'Receipt scanning: TAGGUN_API_KEY is not available on this deployment. For Cloudflare Pages add an encrypted secret named TAGGUN_API_KEY under Settings → Variables and Secrets for Production, then redeploy (secrets apply on the next deployment). CLI: npx wrangler pages secret put TAGGUN_API_KEY --project-name budget-tobiasbay-me',
       }),
       { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
