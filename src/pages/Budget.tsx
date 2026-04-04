@@ -3427,9 +3427,20 @@ export default function Budget() {
                                         <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary, fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem' }}>
                                             Monthly Overview
                                         </Typography>
+                                        {(() => {
+                                            const narrowMonthChart = isMobile || isTablet;
+                                            const monthColW = 58;
+                                            const chartRowMinWidth = narrowMonthChart
+                                                ? `${MONTHS.length * monthColW + (MONTHS.length - 1) * 4}px`
+                                                : isDesktop
+                                                    ? 'auto'
+                                                    : '600px';
+                                            return (
                                         <Box sx={{
                                             overflowX: 'auto',
                                             overflowY: 'visible',
+                                            pb: narrowMonthChart ? 1 : 0,
+                                            WebkitOverflowScrolling: 'touch',
                                             '&::-webkit-scrollbar': {
                                                 height: '6px',
                                             },
@@ -3440,15 +3451,16 @@ export default function Budget() {
                                                 background: theme.palette.secondary.main,
                                                 borderRadius: '3px',
                                             },
+                                            scrollbarWidth: 'thin',
                                         }}>
                                             <Box sx={{
                                                 display: 'flex',
                                                 alignItems: 'flex-end',
-                                                gap: isMobile ? 0.5 : isDesktop ? 1 : 0.5,
-                                                height: isMobile ? '220px' : isDesktop ? '300px' : '220px',
-                                                px: isMobile ? 0.5 : isDesktop ? 1 : 0.5,
+                                                gap: narrowMonthChart ? 0.5 : isDesktop ? 1 : 0.5,
+                                                height: isMobile ? '200px' : isDesktop ? '300px' : '220px',
+                                                px: narrowMonthChart ? 0.25 : isDesktop ? 1 : 0.5,
                                                 mb: 2,
-                                                minWidth: isMobile ? '600px' : isDesktop ? 'auto' : '600px'
+                                                minWidth: chartRowMinWidth,
                                             }}>
                                                 {insights.monthlyData.map((data) => {
                                                     const incomeHeight = (data.income / maxValue) * 100;
@@ -3457,14 +3469,25 @@ export default function Budget() {
 
                                                     return (
                                                         <Box key={data.month} sx={{
-                                                            flex: 1,
                                                             display: 'flex',
                                                             flexDirection: 'column',
                                                             alignItems: 'center',
                                                             height: '100%',
                                                             justifyContent: 'flex-end',
-                                                            gap: isMobile ? 0.25 : isDesktop ? 0.5 : 0.25,
-                                                            minWidth: isMobile ? '40px' : isDesktop ? 'auto' : '40px'
+                                                            gap: narrowMonthChart ? 0.2 : isDesktop ? 0.5 : 0.25,
+                                                            ...(narrowMonthChart
+                                                                ? {
+                                                                    flex: '0 0 auto',
+                                                                    width: `${monthColW}px`,
+                                                                    minWidth: `${monthColW}px`,
+                                                                    maxWidth: `${monthColW}px`,
+                                                                    overflow: 'hidden',
+                                                                    boxSizing: 'border-box',
+                                                                }
+                                                                : {
+                                                                    flex: 1,
+                                                                    minWidth: isDesktop ? 0 : '40px',
+                                                                }),
                                                         }}>
                                                             <Box sx={{
                                                                 display: 'flex',
@@ -3517,51 +3540,84 @@ export default function Budget() {
                                                             }}>
                                                                 {data.month.substring(0, 3)}
                                                             </Typography>
-                                                            {/* Value Labels - Always shown below columns */}
+                                                            {/* Value Labels — fixed-width columns on phone/tablet; stack net + % to avoid overlap */}
                                                             <Box sx={{
                                                                 display: 'flex',
                                                                 flexDirection: 'column',
                                                                 alignItems: 'center',
-                                                                gap: isMobile ? 0.25 : 0.3,
+                                                                gap: narrowMonthChart ? 0.15 : 0.3,
                                                                 mt: 0.5,
-                                                                width: '100%'
+                                                                width: '100%',
+                                                                maxWidth: '100%',
+                                                                px: narrowMonthChart ? 0.25 : 0,
+                                                                boxSizing: 'border-box',
                                                             }}>
                                                                 <Typography sx={{
-                                                                    fontSize: isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
+                                                                    fontSize: narrowMonthChart ? '0.5rem' : isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
                                                                     color: '#4caf50',
                                                                     fontWeight: 'bold',
                                                                     textAlign: 'center',
-                                                                    lineHeight: 1.2
+                                                                    lineHeight: 1.15,
+                                                                    width: '100%',
+                                                                    maxWidth: '100%',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    whiteSpace: 'nowrap',
                                                                 }}>
                                                                     {formatBudgetAmount(data.income).replace(/\s/g, '')}
                                                                 </Typography>
                                                                 <Typography sx={{
-                                                                    fontSize: isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
+                                                                    fontSize: narrowMonthChart ? '0.5rem' : isMobile ? '0.6rem' : isDesktop ? '0.7rem' : '0.65rem',
                                                                     color: '#f44336',
                                                                     fontWeight: 'bold',
                                                                     textAlign: 'center',
-                                                                    lineHeight: 1.2
+                                                                    lineHeight: 1.15,
+                                                                    width: '100%',
+                                                                    maxWidth: '100%',
+                                                                    overflow: 'hidden',
+                                                                    textOverflow: 'ellipsis',
+                                                                    whiteSpace: 'nowrap',
                                                                 }}>
                                                                     {formatBudgetAmount(data.expense).replace(/\s/g, '')}
                                                                 </Typography>
-                                                                <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 0.3, justifyContent: 'center', mt: 0.25 }}>
+                                                                <Box sx={{
+                                                                    display: 'flex',
+                                                                    flexDirection: narrowMonthChart ? 'column' : 'row',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    gap: narrowMonthChart ? 0 : 0.3,
+                                                                    rowGap: narrowMonthChart ? 0.1 : undefined,
+                                                                    mt: narrowMonthChart ? 0.15 : 0.25,
+                                                                    width: '100%',
+                                                                    maxWidth: '100%',
+                                                                }}>
                                                                     <Typography sx={{
-                                                                        fontSize: isMobile ? '0.55rem' : isDesktop ? '0.65rem' : '0.6rem',
+                                                                        fontSize: narrowMonthChart ? '0.48rem' : isMobile ? '0.55rem' : isDesktop ? '0.65rem' : '0.6rem',
                                                                         color: savings >= 0 ? '#4caf50' : '#f44336',
                                                                         fontWeight: 'bold',
                                                                         textAlign: 'center',
-                                                                        lineHeight: 1.2,
+                                                                        lineHeight: 1.15,
+                                                                        width: '100%',
+                                                                        maxWidth: '100%',
+                                                                        overflow: 'hidden',
+                                                                        textOverflow: 'ellipsis',
+                                                                        whiteSpace: 'nowrap',
                                                                     }}>
                                                                         {formatBudgetAmount(savings).replace(/\s/g, '')}
                                                                     </Typography>
                                                                     {data.income > 0 && (
                                                                         <Typography sx={{
-                                                                            fontSize: isMobile ? '0.5rem' : isDesktop ? '0.6rem' : '0.55rem',
+                                                                            fontSize: narrowMonthChart ? '0.45rem' : isMobile ? '0.5rem' : isDesktop ? '0.6rem' : '0.55rem',
                                                                             color: savings >= 0 ? '#4caf50' : '#f44336',
                                                                             fontWeight: 'bold',
                                                                             textAlign: 'center',
-                                                                            lineHeight: 1.2,
-                                                                            opacity: 0.8
+                                                                            lineHeight: 1.15,
+                                                                            opacity: 0.9,
+                                                                            width: '100%',
+                                                                            maxWidth: '100%',
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap',
                                                                         }}>
                                                                             ({savings >= 0 ? '+' : ''}{formatBudgetPercent((savings / data.income) * 100)}%)
                                                                         </Typography>
@@ -3573,6 +3629,8 @@ export default function Budget() {
                                                 })}
                                             </Box>
                                         </Box>
+                                            );
+                                        })()}
                                         {/* Legend */}
                                         <Box sx={{ display: 'flex', justifyContent: 'center', gap: isMobile ? 2 : isTablet ? 2.5 : 3, mt: 2, flexWrap: 'wrap' }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
