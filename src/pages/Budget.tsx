@@ -47,6 +47,19 @@ const EXPENSE_CATEGORIES = [
     'Other'
 ] as const;
 
+/** Categories for fun (one-off) expenses. If none is chosen, `FUN_EXPENSE_DEFAULT_CATEGORY` is stored. */
+const FUN_EXPENSE_CATEGORIES = [
+    'Restaurant & dining',
+    'Sport & fitness',
+    'Shopping',
+    'Entertainment',
+    'Travel',
+    'Hobbies',
+    'Other',
+] as const;
+
+const FUN_EXPENSE_DEFAULT_CATEGORY: (typeof FUN_EXPENSE_CATEGORIES)[number] = 'Other';
+
 /** Order of regular expense rows in the budget table (remaining categories follow). */
 const EXPENSE_TABLE_CATEGORY_ORDER: readonly (typeof EXPENSE_CATEGORIES)[number][] = [
     'Housing',
@@ -119,7 +132,13 @@ interface LineItem {
     isStaticExpense?: boolean;
     staticExpenseDate?: string; // Format: "YYYY-MM-DD"
     staticExpensePrice?: number;
-    category?: string | null; // Expense category
+    category?: string | null; // Expense category (also used for fun expense type)
+}
+
+function getFunExpenseDisplayCategory(item: LineItem): string {
+    if (!item.isStaticExpense) return '';
+    const c = item.category && item.category.trim();
+    return c || FUN_EXPENSE_DEFAULT_CATEGORY;
 }
 
 function compareRegularExpenseRows(a: LineItem, b: LineItem): number {
@@ -168,6 +187,7 @@ export default function Budget() {
     const [staticExpenseName, setStaticExpenseName] = useState('');
     const [staticExpenseDate, setStaticExpenseDate] = useState('');
     const [staticExpensePrice, setStaticExpensePrice] = useState('');
+    const [staticExpenseCategory, setStaticExpenseCategory] = useState('');
     const [linkedLoanId, setLinkedLoanId] = useState<string>('');
     const [expenseCategory, setExpenseCategory] = useState<string>('');
     const [loans, setLoans] = useState<Loan[]>([]);
@@ -183,6 +203,7 @@ export default function Budget() {
     const [editStaticExpenseName, setEditStaticExpenseName] = useState('');
     const [editStaticExpenseDate, setEditStaticExpenseDate] = useState('');
     const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
+    const [editStaticExpenseCategory, setEditStaticExpenseCategory] = useState('');
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [insightsModalOpen, setInsightsModalOpen] = useState(false);
     const [selectedMonthForChart, setSelectedMonthForChart] = useState<string>('all');
@@ -380,6 +401,13 @@ export default function Budget() {
                     if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
                         normalizedItem.isStaticExpense = true;
                     }
+                    if (normalizedItem.isStaticExpense && normalizedItem.type === 'expense') {
+                        const cc = normalizedItem.category && String(normalizedItem.category).trim();
+                        normalizedItem.category =
+                            cc && (FUN_EXPENSE_CATEGORIES as readonly string[]).includes(cc)
+                                ? cc
+                                : FUN_EXPENSE_DEFAULT_CATEGORY;
+                    }
                     return normalizedItem;
                 });
                 setLineItems(normalizedItems);
@@ -415,8 +443,12 @@ export default function Budget() {
 
                 // Explicitly include category field (use null instead of undefined so it's serialized)
                 if (item.type === 'expense') {
-                    // Normalize category: empty string becomes null, undefined becomes null
-                    normalizedItem.category = (item.category && item.category.trim()) || null;
+                    if (item.isStaticExpense) {
+                        normalizedItem.category =
+                            (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
+                    } else {
+                        normalizedItem.category = (item.category && item.category.trim()) || null;
+                    }
                 }
 
                 return normalizedItem;
@@ -462,6 +494,7 @@ export default function Budget() {
         setStaticExpenseName('');
         setStaticExpenseDate('');
         setStaticExpensePrice('');
+        setStaticExpenseCategory('');
         setLinkedLoanId('');
         setExpenseCategory('');
         handleCloseMenu();
@@ -479,6 +512,7 @@ export default function Budget() {
         setStaticExpenseName('');
         setStaticExpenseDate('');
         setStaticExpensePrice('');
+        setStaticExpenseCategory('');
         setLinkedLoanId('');
         setExpenseCategory('');
     };
@@ -532,9 +566,11 @@ export default function Budget() {
             ...(isStaticExpense && {
                 isStaticExpense: true,
                 staticExpenseDate: staticExpenseDate,
-                staticExpensePrice: parseFloat(staticExpensePrice) || 0
+                staticExpensePrice: parseFloat(staticExpensePrice) || 0,
+                category:
+                    (staticExpenseCategory && staticExpenseCategory.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY,
             }),
-            ...(itemType === 'expense' && {
+            ...(itemType === 'expense' && !isStaticExpense && {
                 category: (expenseCategory && expenseCategory.trim()) || null
             })
         };
@@ -799,7 +835,8 @@ export default function Budget() {
         let funExpensesByItem = filteredFunExpenses
             .map(item => ({
                 name: item.name,
-                amount: item.staticExpensePrice || 0
+                amount: item.staticExpensePrice || 0,
+                category: getFunExpenseDisplayCategory(item),
             }))
             .sort((a, b) => b.amount - a.amount); // Sort by amount descending (highest percentage first)
 
@@ -810,11 +847,22 @@ export default function Budget() {
             const otherAmount = remainingItems.reduce((sum, item) => sum + item.amount, 0);
 
             if (otherAmount > 0) {
-                funExpensesByItem = [...top10, { name: 'Other', amount: otherAmount }];
+                funExpensesByItem = [...top10, { name: 'Other', amount: otherAmount, category: 'Other' }];
             } else {
                 funExpensesByItem = top10;
             }
         }
+
+        const funExpenseCategoryTotals: { [key: string]: number } = {};
+        filteredFunExpenses.forEach((item) => {
+            const cat = getFunExpenseDisplayCategory(item);
+            const amt = item.staticExpensePrice || 0;
+            funExpenseCategoryTotals[cat] = (funExpenseCategoryTotals[cat] || 0) + amt;
+        });
+        const funExpenseCategoryBreakdown = Object.entries(funExpenseCategoryTotals)
+            .map(([category, amount]) => ({ category, amount }))
+            .filter((row) => row.amount > 0)
+            .sort((a, b) => b.amount - a.amount);
 
         // Calculate expenses by category
         const expensesByCategory: { [key: string]: number } = {};
@@ -856,6 +904,7 @@ export default function Budget() {
             savingsRate,
             funExpensesByItem,
             totalFunExpenses,
+            funExpenseCategoryBreakdown,
             categoryBreakdown,
             benchmarkSimilarityScore
         };
@@ -2685,11 +2734,33 @@ export default function Budget() {
                                                                                 },
                                                                             }}
                                                                         />
+                                                                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                                                                            <InputLabel id={`edit-fun-cat-${item.id}`}>Category</InputLabel>
+                                                                            <Select
+                                                                                labelId={`edit-fun-cat-${item.id}`}
+                                                                                label="Category"
+                                                                                value={editStaticExpenseCategory || FUN_EXPENSE_DEFAULT_CATEGORY}
+                                                                                onChange={(e) => setEditStaticExpenseCategory(e.target.value)}
+                                                                                sx={{
+                                                                                    color: theme.palette.text.primary,
+                                                                                    '& .MuiOutlinedInput-notchedOutline': {
+                                                                                        borderColor: theme.palette.secondary.main,
+                                                                                    },
+                                                                                }}
+                                                                            >
+                                                                                {FUN_EXPENSE_CATEGORIES.map((c) => (
+                                                                                    <MenuItem key={c} value={c}>{c}</MenuItem>
+                                                                                ))}
+                                                                            </Select>
+                                                                        </FormControl>
                                                                         <Button
                                                                             onClick={() => {
                                                                                 if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
 
                                                                                 const price = parseFloat(editStaticExpensePrice) || 0;
+                                                                                const funCat =
+                                                                                    (editStaticExpenseCategory && editStaticExpenseCategory.trim()) ||
+                                                                                    FUN_EXPENSE_DEFAULT_CATEGORY;
                                                                                 let monthName = '';
 
                                                                                 // Validate and parse date
@@ -2716,6 +2787,7 @@ export default function Budget() {
                                                                                             staticExpensePrice: price,
                                                                                             months: newMonths,
                                                                                             isStaticExpense: true, // Explicitly preserve the flag
+                                                                                            category: funCat,
                                                                                         };
                                                                                     }
                                                                                     return li;
@@ -2725,6 +2797,7 @@ export default function Budget() {
                                                                                 setEditStaticExpenseName('');
                                                                                 setEditStaticExpenseDate('');
                                                                                 setEditStaticExpensePrice('');
+                                                                                setEditStaticExpenseCategory('');
                                                                             }}
                                                                             variant="contained"
                                                                             size="small"
@@ -2741,6 +2814,7 @@ export default function Budget() {
                                                                                 setEditStaticExpenseName('');
                                                                                 setEditStaticExpenseDate('');
                                                                                 setEditStaticExpensePrice('');
+                                                                                setEditStaticExpenseCategory('');
                                                                             }}
                                                                             size="small"
                                                                             sx={{
@@ -2759,6 +2833,17 @@ export default function Budget() {
                                                                             <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
                                                                                 {item.staticExpenseDate ? new Date(item.staticExpenseDate).toLocaleDateString() : 'No date'}
                                                                             </Typography>
+                                                                            <Chip
+                                                                                label={getFunExpenseDisplayCategory(item)}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    alignSelf: 'flex-start',
+                                                                                    height: '22px',
+                                                                                    fontSize: '0.7rem',
+                                                                                    bgcolor: theme.palette.warning.dark,
+                                                                                    color: theme.palette.warning.contrastText,
+                                                                                }}
+                                                                            />
                                                                         </Box>
                                                                         <Typography sx={{ color: theme.palette.warning.main, fontWeight: 'bold', minWidth: isMobile ? '60px' : '80px', textAlign: 'right', flexShrink: 0 }}>
                                                                             {formatBudgetAmount(item.staticExpensePrice || 0)}
@@ -2770,6 +2855,7 @@ export default function Budget() {
                                                                                     setEditStaticExpenseName(item.name);
                                                                                     setEditStaticExpenseDate(item.staticExpenseDate || '');
                                                                                     setEditStaticExpensePrice((item.staticExpensePrice || 0).toString());
+                                                                                    setEditStaticExpenseCategory(getFunExpenseDisplayCategory(item));
                                                                                 }}
                                                                                 size="small"
                                                                                 sx={{
@@ -2865,6 +2951,34 @@ export default function Budget() {
                                             },
                                         }}
                                     />
+                                    <FormControl fullWidth>
+                                        <InputLabel id="fun-expense-category-label">Category</InputLabel>
+                                        <Select
+                                            labelId="fun-expense-category-label"
+                                            label="Category"
+                                            value={staticExpenseCategory}
+                                            onChange={(e) => setStaticExpenseCategory(e.target.value)}
+                                            sx={{
+                                                color: theme.palette.text.primary,
+                                                '& .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: theme.palette.secondary.main,
+                                                },
+                                                '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                    borderColor: theme.palette.primary.main,
+                                                },
+                                            }}
+                                        >
+                                            <MenuItem value="">
+                                                <em>Default ({FUN_EXPENSE_DEFAULT_CATEGORY})</em>
+                                            </MenuItem>
+                                            {FUN_EXPENSE_CATEGORIES.map((c) => (
+                                                <MenuItem key={c} value={c}>{c}</MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
                                     <TextField
                                         label="Date"
                                         type="date"
@@ -3665,17 +3779,28 @@ export default function Budget() {
                                                                     gap: isMobile ? 0.5 : isTablet ? 0.75 : 1,
                                                                     minWidth: 0
                                                                 }}>
-                                                                    <Typography sx={{
-                                                                        fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem',
-                                                                        color: theme.palette.text.primary,
-                                                                        overflow: 'hidden',
-                                                                        textOverflow: 'ellipsis',
-                                                                        whiteSpace: 'nowrap',
-                                                                        flex: 1,
-                                                                        minWidth: 0
-                                                                    }}>
-                                                                        {item.name}
-                                                                    </Typography>
+                                                                    <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                                                                        <Typography sx={{
+                                                                            fontSize: isMobile ? '0.75rem' : isTablet ? '0.8rem' : '0.875rem',
+                                                                            color: theme.palette.text.primary,
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap',
+                                                                        }}>
+                                                                            {item.name}
+                                                                        </Typography>
+                                                                        {item.category ? (
+                                                                            <Typography sx={{
+                                                                                fontSize: isMobile ? '0.65rem' : '0.7rem',
+                                                                                color: theme.palette.text.secondary,
+                                                                                whiteSpace: 'nowrap',
+                                                                                overflow: 'hidden',
+                                                                                textOverflow: 'ellipsis',
+                                                                            }}>
+                                                                                {item.category}
+                                                                            </Typography>
+                                                                        ) : null}
+                                                                    </Box>
                                                                     <Box sx={{
                                                                         display: 'flex',
                                                                         gap: isMobile ? 0.5 : isTablet ? 0.75 : 1,
@@ -3703,6 +3828,62 @@ export default function Budget() {
                                                         );
                                                     })}
                                                 </Box>
+                                            </Box>
+                                        </Paper>
+                                    )}
+
+                                    {/* Fun expense categories (same scope as fun-expense pie: month filter or all) */}
+                                    {insights.funExpenseCategoryBreakdown.length > 0 && (
+                                        <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
+                                            <Typography variant="h6" sx={{ mb: 0.5, color: theme.palette.text.primary }}>
+                                                Fun expenses by category
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, mb: 2 }}>
+                                                Totals for the fun-expense period selected above (single month or full year).
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                                {insights.funExpenseCategoryBreakdown.map((row, index) => {
+                                                    const pct =
+                                                        insights.totalFunExpenses > 0
+                                                            ? (row.amount / insights.totalFunExpenses) * 100
+                                                            : 0;
+                                                    const colors = [
+                                                        '#FF9800', '#FFB74D', '#F57C00', '#E65100', '#FFCC80',
+                                                        '#8D6E63', '#6D4C41', '#A1887F', '#BCAAA4', '#5D4037'
+                                                    ];
+                                                    return (
+                                                        <Box key={row.category}>
+                                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                                                                <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.primary, fontWeight: 500 }}>
+                                                                    {row.category}
+                                                                </Typography>
+                                                                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                                                                    <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                                        {formatBudgetPercent(pct)}%
+                                                                    </Typography>
+                                                                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 'bold', color: theme.palette.warning.main, minWidth: '80px', textAlign: 'right' }}>
+                                                                        {formatBudgetAmount(row.amount)}
+                                                                    </Typography>
+                                                                </Box>
+                                                            </Box>
+                                                            <Box sx={{
+                                                                width: '100%',
+                                                                height: '8px',
+                                                                bgcolor: theme.palette.background.paper,
+                                                                borderRadius: '4px',
+                                                                overflow: 'hidden'
+                                                            }}>
+                                                                <Box sx={{
+                                                                    width: `${pct}%`,
+                                                                    height: '100%',
+                                                                    bgcolor: colors[index % colors.length],
+                                                                    borderRadius: '4px',
+                                                                    transition: 'width 0.3s ease'
+                                                                }} />
+                                                            </Box>
+                                                        </Box>
+                                                    );
+                                                })}
                                             </Box>
                                         </Paper>
                                     )}
