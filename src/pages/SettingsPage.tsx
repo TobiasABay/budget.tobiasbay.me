@@ -51,6 +51,100 @@ function formatPdfMoney(amount: number, currency: Currency): string {
   return formatCurrency(amount, currency) || String(amount);
 }
 
+const PDF_CHART_GREEN: [number, number, number] = [76, 175, 80];
+const PDF_CHART_RED: [number, number, number] = [244, 67, 54];
+
+/** Draw a two-series line chart (income / expenses). Returns Y position below the chart for `autoTable` startY. */
+function drawIncomeExpenseLineChartPdf(
+  doc: jsPDF,
+  startY: number,
+  monthlyRows: { month: string; income: number; expenses: number }[],
+  margin: number
+): number {
+  const pageW = doc.internal.pageSize.getWidth();
+  const chartTitleH = 5;
+  const chartH = 50;
+  const axisPadLeft = 16;
+  const axisPadBottom = 10;
+  const plotTop = startY + chartTitleH;
+  const plotBottom = plotTop + chartH - axisPadBottom;
+  const plotLeft = margin + axisPadLeft;
+  const plotRight = pageW - margin;
+  const plotW = plotRight - plotLeft;
+  const plotInnerH = plotBottom - plotTop;
+
+  const incomes = monthlyRows.map((r) => r.income);
+  const expenses = monthlyRows.map((r) => r.expenses);
+  const maxVal = Math.max(1, ...incomes, ...expenses);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Income vs expenses (12 months)', margin, startY);
+
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.15);
+  for (let g = 1; g <= 3; g++) {
+    const y = plotBottom - (g / 4) * plotInnerH;
+    doc.line(plotLeft, y, plotRight, y);
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  const fmtAxis = (n: number) =>
+    n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 10_000 ? `${Math.round(n / 1000)}k` : `${Math.round(n)}`;
+  doc.text(fmtAxis(maxVal), margin, plotTop + 3);
+  doc.text('0', margin, plotBottom + 1);
+
+  doc.setDrawColor(120, 120, 120);
+  doc.setLineWidth(0.25);
+  doc.line(plotLeft, plotTop, plotRight, plotTop);
+  doc.line(plotLeft, plotBottom, plotRight, plotBottom);
+  doc.line(plotLeft, plotTop, plotLeft, plotBottom);
+
+  const n = monthlyRows.length;
+  const span = Math.max(1, n - 1);
+  const xAt = (i: number) => plotLeft + (i / span) * plotW;
+  const yAt = (v: number) => plotBottom - (v / maxVal) * plotInnerH;
+
+  const strokeSeries = (vals: number[], rgb: [number, number, number]) => {
+    doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+    doc.setLineWidth(0.45);
+    for (let i = 0; i < vals.length - 1; i++) {
+      doc.line(xAt(i), yAt(vals[i]), xAt(i + 1), yAt(vals[i + 1]));
+    }
+    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    for (let i = 0; i < vals.length; i++) {
+      doc.circle(xAt(i), yAt(vals[i]), 0.7, 'F');
+    }
+  };
+
+  strokeSeries(incomes, PDF_CHART_GREEN);
+  strokeSeries(expenses, PDF_CHART_RED);
+
+  doc.setFontSize(5.5);
+  doc.setTextColor(70, 70, 70);
+  monthlyRows.forEach((r, i) => {
+    const abbr = r.month.slice(0, 3);
+    const x = xAt(i) - doc.getTextWidth(abbr) / 2;
+    doc.text(abbr, x, plotBottom + 5);
+  });
+
+  const legY = plotBottom + 10;
+  doc.setFillColor(PDF_CHART_GREEN[0], PDF_CHART_GREEN[1], PDF_CHART_GREEN[2]);
+  doc.rect(margin, legY - 2.5, 3, 2.5, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Income', margin + 4.5, legY);
+
+  doc.setFillColor(PDF_CHART_RED[0], PDF_CHART_RED[1], PDF_CHART_RED[2]);
+  doc.rect(margin + 32, legY - 2.5, 3, 2.5, 'F');
+  doc.text('Expenses', margin + 36.5, legY);
+
+  return legY + 4;
+}
+
 async function fetchBudgets(userId: string): Promise<string[]> {
   const response = await fetch(`${API_BASE_URL}/budgets`, {
     method: 'GET',
@@ -807,8 +901,10 @@ export default function SettingsPage() {
 
       const afterSummary = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
+      const afterChart = drawIncomeExpenseLineChartPdf(doc, afterSummary + 10, monthlyRows, margin);
+
       autoTable(doc, {
-        startY: afterSummary + 12,
+        startY: afterChart + 6,
         head: [['Month', 'Income', 'Expenses', 'Net']],
         body: monthlyRows.map((r) => [
           r.month.slice(0, 3),
