@@ -29,9 +29,7 @@ interface Loan {
   updatedAt?: string;
 }
 
-// Use production API URL so local and production frontends use the same backend and database
-// In dev mode, connect directly to production API. In production, use relative path.
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const BUDGET_REPORT_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',

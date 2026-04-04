@@ -19,7 +19,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 // Use production API URL so local and production frontends use the same backend and database
 // In dev mode, connect directly to production API. In production, use relative path.
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 async function fetchBudgets(userId: string): Promise<string[]> {
   const response = await fetch(`${API_BASE_URL}/budgets`, {

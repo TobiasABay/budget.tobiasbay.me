@@ -1,8 +1,8 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -21,12 +21,13 @@ import UnfoldLessIcon from '@mui/icons-material/UnfoldLess';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
-// Use production API URL so local and production frontends use the same backend and database
-// In dev mode, connect directly to production API. In production, use relative path.
-const API_BASE_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'https://budget.tobiasbay.me/api' : '/api');
+// Default: relative `/api` (Vite dev proxies to production; deployed app hits same host).
+// Set VITE_API_URL to override (e.g. local wrangler).
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -59,6 +60,50 @@ const FUN_EXPENSE_CATEGORIES = [
 ] as const;
 
 const FUN_EXPENSE_DEFAULT_CATEGORY: (typeof FUN_EXPENSE_CATEGORIES)[number] = 'Other';
+
+/** Map Taggun verbose JSON → line items for the receipt review UI. */
+function parseTaggunReceiptJson(json: unknown): {
+    merchant: string;
+    date: string;
+    lines: { name: string; price: number }[];
+} {
+    const o = json as Record<string, unknown>;
+    const merchant = String((o.merchantName as { data?: unknown } | undefined)?.data ?? '').trim();
+    const dateRaw = (o.date as { data?: string } | undefined)?.data;
+    const date =
+        dateRaw && typeof dateRaw === 'string'
+            ? dateRaw.slice(0, 10)
+            : new Date().toISOString().slice(0, 10);
+    const entities = o.entities as { productLineItems?: unknown[] } | undefined;
+    const rawLines = Array.isArray(entities?.productLineItems) ? entities!.productLineItems! : [];
+    const lines: { name: string; price: number }[] = [];
+    for (const untyped of rawLines) {
+        const pl = untyped as {
+            data?: {
+                name?: { data?: unknown };
+                totalPrice?: { data?: unknown };
+                unitPrice?: { data?: unknown };
+            };
+        };
+        const name = String(pl.data?.name?.data ?? 'Item').trim() || 'Item';
+        const totalRaw = pl.data?.totalPrice?.data ?? pl.data?.unitPrice?.data;
+        const price = typeof totalRaw === 'number' ? totalRaw : parseFloat(String(totalRaw ?? ''));
+        if (!Number.isFinite(price)) continue;
+        lines.push({ name, price });
+    }
+    if (lines.length === 0) {
+        const totalAmt = (o.totalAmount as { data?: unknown } | undefined)?.data;
+        const total =
+            typeof totalAmt === 'number' ? totalAmt : parseFloat(String(totalAmt ?? ''));
+        if (Number.isFinite(total) && total > 0) {
+            lines.push({
+                name: merchant ? `Purchase — ${merchant}` : 'Receipt total',
+                price: total,
+            });
+        }
+    }
+    return { merchant, date, lines };
+}
 
 /** Order of regular expense rows in the budget table (remaining categories follow). */
 const EXPENSE_TABLE_CATEGORY_ORDER: readonly (typeof EXPENSE_CATEGORIES)[number][] = [
@@ -214,6 +259,17 @@ export default function Budget() {
     const [fullscreenOpen, setFullscreenOpen] = useState(false);
     const [budgetTableExpanded, setBudgetTableExpanded] = useState(true);
     const [hideBudgetNumbers, setHideBudgetNumbers] = useState(false);
+
+    const receiptFileInputRef = useRef<HTMLInputElement>(null);
+    const [receiptScanDialogOpen, setReceiptScanDialogOpen] = useState(false);
+    const [receiptScanning, setReceiptScanning] = useState(false);
+    const [receiptScanError, setReceiptScanError] = useState<string | null>(null);
+    const [receiptMerchant, setReceiptMerchant] = useState('');
+    const [receiptDateStr, setReceiptDateStr] = useState('');
+    const [receiptCategory, setReceiptCategory] = useState('');
+    const [receiptLines, setReceiptLines] = useState<
+        { key: string; name: string; price: number; selected: boolean }[]
+    >([]);
 
     const formatBudgetAmount = (amount: number): string => {
         if (amount === 0) return '-';
@@ -616,6 +672,133 @@ export default function Budget() {
 
         setLineItems(updatedItems);
         handleCloseModal();
+    };
+
+    const handleOpenReceiptScan = () => {
+        handleCloseMenu();
+        setReceiptScanError(null);
+        setReceiptScanning(false);
+        setReceiptMerchant('');
+        setReceiptDateStr(new Date().toISOString().slice(0, 10));
+        setReceiptCategory('');
+        setReceiptLines([]);
+        setReceiptScanDialogOpen(true);
+    };
+
+    const handleCloseReceiptScan = () => {
+        setReceiptScanDialogOpen(false);
+        setReceiptScanError(null);
+        setReceiptScanning(false);
+        setReceiptLines([]);
+        if (receiptFileInputRef.current) {
+            receiptFileInputRef.current.value = '';
+        }
+    };
+
+    const runReceiptScan = async (file: File) => {
+        if (!user?.id) return;
+        setReceiptScanning(true);
+        setReceiptScanError(null);
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+            const res = await fetch(`${API_BASE_URL}/receipts/taggun`, {
+                method: 'POST',
+                headers: { 'X-User-Id': user.id },
+                body: fd,
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg =
+                    typeof (data as { error?: string }).error === 'string'
+                        ? (data as { error: string }).error
+                        : (data as { message?: string }).message || `Scan failed (${res.status})`;
+                setReceiptScanError(msg);
+                setReceiptScanning(false);
+                return;
+            }
+            const parsed = parseTaggunReceiptJson(data);
+            setReceiptMerchant(parsed.merchant);
+            setReceiptDateStr(parsed.date);
+            setReceiptLines(
+                parsed.lines.map((l, i) => ({
+                    key: `r-${Date.now()}-${i}`,
+                    name: l.name,
+                    price: l.price,
+                    selected: true,
+                }))
+            );
+            if (parsed.lines.length === 0) {
+                setReceiptScanError('No line items or total found on this receipt. Try a clearer photo.');
+            }
+        } catch (e) {
+            setReceiptScanError(e instanceof Error ? e.message : 'Network error');
+        } finally {
+            setReceiptScanning(false);
+        }
+    };
+
+    const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) runReceiptScan(file);
+    };
+
+    const handleAddReceiptLinesToBudget = () => {
+        const selected = receiptLines.filter((l) => l.selected && l.price > 0);
+        if (selected.length === 0) {
+            setReceiptScanError('Select at least one line with a positive amount.');
+            return;
+        }
+        const rawCat = receiptCategory.trim();
+        const cat =
+            rawCat && (FUN_EXPENSE_CATEGORIES as readonly string[]).includes(rawCat)
+                ? rawCat
+                : FUN_EXPENSE_DEFAULT_CATEGORY;
+        const date = receiptDateStr;
+        if (!date) {
+            setReceiptScanError('Choose a date for these expenses.');
+            return;
+        }
+        setLineItems((prev) => {
+            const incomeItems = prev.filter((item) => item.type === 'income');
+            const regularExpenses = prev.filter(
+                (item) =>
+                    item.type === 'expense' &&
+                    !item.isLoan &&
+                    !item.isStaticExpense &&
+                    !item.linkedLoanId
+            );
+            const loanLinkedExpenses = prev.filter(
+                (item) =>
+                    item.type === 'expense' &&
+                    !item.isLoan &&
+                    !item.isStaticExpense &&
+                    item.linkedLoanId
+            );
+            const staticExpenses = prev.filter((item) => item.type === 'expense' && item.isStaticExpense);
+            const loanItems = prev.filter((item) => item.type === 'expense' && item.isLoan);
+            const base = Date.now();
+            const newItems: LineItem[] = selected.map((l, i) => {
+                const d = new Date(`${date}T12:00:00`);
+                const monthName = MONTHS[d.getMonth()];
+                const merchant = receiptMerchant.trim();
+                const displayName = merchant ? `${merchant} — ${l.name}` : l.name;
+                return {
+                    id: `${base}-${i}`,
+                    name: displayName.slice(0, 200),
+                    type: 'expense',
+                    amount: 0,
+                    frequency: 'Monthly',
+                    months: { [monthName]: l.price },
+                    isStaticExpense: true,
+                    staticExpenseDate: date,
+                    staticExpensePrice: l.price,
+                    category: cat,
+                };
+            });
+            return [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, ...staticExpenses, ...newItems, ...loanItems];
+        });
+        handleCloseReceiptScan();
     };
 
     const handleCellClick = (itemId: string, month: string) => {
@@ -1067,6 +1250,19 @@ export default function Budget() {
                             }}
                         >
                             Add Fun Expense
+                        </MenuItem>
+                        <MenuItem
+                            onClick={handleOpenReceiptScan}
+                            sx={{
+                                color: theme.palette.info.main,
+                                '&:hover': {
+                                    bgcolor: theme.palette.info.main,
+                                    color: theme.palette.info.contrastText,
+                                },
+                            }}
+                        >
+                            <ReceiptLongIcon sx={{ mr: 1, fontSize: '1.1rem' }} />
+                            Scan receipt (Taggun)
                         </MenuItem>
                     </Menu>
                 </Box>
@@ -3271,6 +3467,200 @@ export default function Budget() {
                             Create
                         </Button>
                     </DialogActions>
+                </Dialog>
+
+                <Dialog
+                    open={receiptScanDialogOpen}
+                    onClose={() => {
+                        if (!receiptScanning) handleCloseReceiptScan();
+                    }}
+                    fullScreen={isMobile}
+                    maxWidth="sm"
+                    fullWidth
+                    PaperProps={{
+                        sx: {
+                            bgcolor: theme.palette.background.paper,
+                            color: theme.palette.text.primary,
+                            margin: isMobile ? 0 : 'auto',
+                            width: isMobile ? '100%' : 'auto',
+                            maxHeight: isMobile ? '100%' : '90vh',
+                        },
+                    }}
+                >
+                    <DialogTitle
+                        sx={{
+                            color: theme.palette.text.primary,
+                            fontSize: isMobile ? '1.1rem' : '1.25rem',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                        }}
+                    >
+                        <span>Scan receipt</span>
+                        <IconButton
+                            onClick={handleCloseReceiptScan}
+                            size="small"
+                            disabled={receiptScanning}
+                            sx={{
+                                color: theme.palette.text.secondary,
+                                '&:hover': { bgcolor: theme.palette.background.default },
+                            }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
+                    </DialogTitle>
+                    <DialogContent>
+                        <input
+                            ref={receiptFileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/gif,image/heic,image/heif,application/pdf"
+                            style={{ display: 'none' }}
+                            onChange={handleReceiptFileChange}
+                        />
+                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary, mb: 1.5 }}>
+                            Photo or PDF is sent to Taggun for OCR (incognito). Each line can be added as a fun expense.
+                        </Typography>
+                        <Button
+                            variant="outlined"
+                            disabled={receiptScanning}
+                            onClick={() => receiptFileInputRef.current?.click()}
+                            sx={{ mb: 2 }}
+                        >
+                            Choose file
+                        </Button>
+                        {receiptScanning && <LinearProgress sx={{ mb: 2 }} />}
+                        {receiptScanError && (
+                            <Typography sx={{ color: theme.palette.error.main, mb: 2, fontSize: '0.875rem' }}>
+                                {receiptScanError}
+                            </Typography>
+                        )}
+                        {receiptLines.length > 0 && (
+                            <>
+                                <TextField
+                                    label="Merchant (from receipt)"
+                                    value={receiptMerchant}
+                                    onChange={(e) => setReceiptMerchant(e.target.value)}
+                                    fullWidth
+                                    size="small"
+                                    sx={{ mb: 1.5 }}
+                                />
+                                <TextField
+                                    label="Date"
+                                    type="date"
+                                    value={receiptDateStr}
+                                    onChange={(e) => setReceiptDateStr(e.target.value)}
+                                    fullWidth
+                                    size="small"
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={{ mb: 1.5 }}
+                                />
+                                <FormControl fullWidth size="small" sx={{ mb: 1.5 }}>
+                                    <InputLabel id="receipt-fun-category-label">Fun expense category</InputLabel>
+                                    <Select
+                                        labelId="receipt-fun-category-label"
+                                        label="Fun expense category"
+                                        value={receiptCategory}
+                                        onChange={(e) => setReceiptCategory(e.target.value)}
+                                    >
+                                        <MenuItem value="">
+                                            <em>Default ({FUN_EXPENSE_DEFAULT_CATEGORY})</em>
+                                        </MenuItem>
+                                        {FUN_EXPENSE_CATEGORIES.map((c) => (
+                                            <MenuItem key={c} value={c}>
+                                                {c}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                                <TableContainer sx={{ maxHeight: 320, border: `1px solid ${theme.palette.divider}` }}>
+                                    <Table size="small" stickyHeader>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell padding="checkbox" />
+                                                <TableCell>Item</TableCell>
+                                                <TableCell align="right">Amount</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {receiptLines.map((row) => (
+                                                <TableRow key={row.key}>
+                                                    <TableCell padding="checkbox">
+                                                        <Checkbox
+                                                            checked={row.selected}
+                                                            onChange={(e) =>
+                                                                setReceiptLines((prev) =>
+                                                                    prev.map((r) =>
+                                                                        r.key === row.key
+                                                                            ? { ...r, selected: e.target.checked }
+                                                                            : r
+                                                                    )
+                                                                )
+                                                            }
+                                                            size="small"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell sx={{ maxWidth: 140 }}>
+                                                        <TextField
+                                                            value={row.name}
+                                                            onChange={(e) =>
+                                                                setReceiptLines((prev) =>
+                                                                    prev.map((r) =>
+                                                                        r.key === row.key
+                                                                            ? { ...r, name: e.target.value }
+                                                                            : r
+                                                                    )
+                                                                )
+                                                            }
+                                                            size="small"
+                                                            fullWidth
+                                                            variant="standard"
+                                                        />
+                                                    </TableCell>
+                                                    <TableCell align="right" sx={{ verticalAlign: 'middle' }}>
+                                                        <TextField
+                                                            type="number"
+                                                            value={row.price}
+                                                            onChange={(e) => {
+                                                                const v = parseFloat(e.target.value);
+                                                                setReceiptLines((prev) =>
+                                                                    prev.map((r) =>
+                                                                        r.key === row.key
+                                                                            ? {
+                                                                                  ...r,
+                                                                                  price: Number.isFinite(v) ? v : 0,
+                                                                              }
+                                                                            : r
+                                                                    )
+                                                                );
+                                                            }}
+                                                            size="small"
+                                                            inputProps={{ step: '0.01', min: 0 }}
+                                                            sx={{ width: 96 }}
+                                                            variant="standard"
+                                                        />
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            </>
+                        )}
+                    </DialogContent>
+                    {receiptLines.length > 0 && (
+                        <DialogActions>
+                            <Button onClick={handleCloseReceiptScan} disabled={receiptScanning}>
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="contained"
+                                onClick={handleAddReceiptLinesToBudget}
+                                disabled={receiptScanning}
+                            >
+                                Add to budget
+                            </Button>
+                        </DialogActions>
+                    )}
                 </Dialog>
 
                 {/* Insights Modal */}
