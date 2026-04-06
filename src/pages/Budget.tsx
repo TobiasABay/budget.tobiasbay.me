@@ -2,7 +2,7 @@ import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
 import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -958,6 +958,22 @@ export default function Budget() {
         setDraggedItemId(null);
         setDragOverItemId(null);
     };
+
+    /** Same rules as Total Income / Total Expense / Savings rows (Nordnet excluded from expenses). */
+    const collapsedTableMonthSummaries = useMemo(
+        () =>
+            MONTHS.map((month) => {
+                const totalIncome = lineItems
+                    .filter((item) => item.type === 'income')
+                    .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                const totalExpense = lineItems
+                    .filter((item) => item.type === 'expense' && !isNordnetItem(item))
+                    .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                const netto = totalIncome - totalExpense;
+                return { month, totalIncome, totalExpense, netto };
+            }),
+        [lineItems]
+    );
 
     // Calculate insights
     const calculateInsights = (selectedMonth?: string) => {
@@ -2254,15 +2270,22 @@ export default function Budget() {
 
                 {!budgetTableExpanded && (
                     <Paper
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setBudgetTableExpanded(true)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setBudgetTableExpanded(true);
+                            }
+                        }}
                         sx={{
                             bgcolor: theme.palette.background.paper,
-                            py: 1,
-                            px: 2,
+                            py: 1.25,
+                            px: 1.5,
                             mb: isMobile ? '1rem' : '2rem',
                             display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
+                            alignItems: 'stretch',
                             gap: 1,
                             cursor: 'pointer',
                             border: `1px dashed ${theme.palette.secondary.main}`,
@@ -2271,10 +2294,108 @@ export default function Budget() {
                             },
                         }}
                     >
-                        <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.9rem' }}>
-                            Budget table hidden — click to expand
-                        </Typography>
-                        <UnfoldMoreIcon sx={{ color: theme.palette.secondary.light, flexShrink: 0 }} />
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'stretch',
+                                gap: 1,
+                                flex: 1,
+                                minWidth: 0,
+                            }}
+                        >
+                            <Box
+                                sx={{
+                                    flexShrink: 0,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'flex-end',
+                                    gap: isMobile ? 0.35 : 0.45,
+                                    pt: 2,
+                                    pb: 0.25,
+                                }}
+                            >
+                                {(['Income', 'Expense', 'Net'] as const).map((label) => (
+                                    <Typography
+                                        key={label}
+                                        sx={{
+                                            color: theme.palette.text.secondary,
+                                            fontSize: isMobile ? '0.65rem' : '0.7rem',
+                                            lineHeight: 1.2,
+                                            textAlign: 'right',
+                                        }}
+                                    >
+                                        {label}
+                                    </Typography>
+                                ))}
+                            </Box>
+                            <Box
+                                sx={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    display: 'flex',
+                                    gap: isMobile ? 0.5 : 0.75,
+                                    overflowX: 'auto',
+                                    pb: 0.25,
+                                    WebkitOverflowScrolling: 'touch',
+                                }}
+                            >
+                                {collapsedTableMonthSummaries.map(
+                                    ({ month, totalIncome, totalExpense, netto }) => (
+                                        <Box
+                                            key={month}
+                                            sx={{
+                                                flex: '0 0 auto',
+                                                minWidth: isMobile ? 68 : 76,
+                                                textAlign: 'center',
+                                                px: 0.25,
+                                            }}
+                                        >
+                                            <Typography
+                                                sx={{
+                                                    fontWeight: 600,
+                                                    fontSize: isMobile ? '0.65rem' : '0.7rem',
+                                                    color: theme.palette.text.secondary,
+                                                    mb: 0.35,
+                                                }}
+                                            >
+                                                {month.substring(0, 3)}
+                                            </Typography>
+                                            <Typography
+                                                sx={{
+                                                    fontSize: isMobile ? '0.62rem' : '0.68rem',
+                                                    color: '#4caf50',
+                                                    lineHeight: 1.25,
+                                                    fontWeight: 600,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(totalIncome)}
+                                            </Typography>
+                                            <Typography
+                                                sx={{
+                                                    fontSize: isMobile ? '0.62rem' : '0.68rem',
+                                                    color: '#f44336',
+                                                    lineHeight: 1.25,
+                                                    fontWeight: 600,
+                                                }}
+                                            >
+                                                {formatBudgetAmount(totalExpense)}
+                                            </Typography>
+                                            <Typography
+                                                sx={{
+                                                    fontSize: isMobile ? '0.65rem' : '0.72rem',
+                                                    color: netto >= 0 ? '#4caf50' : '#f44336',
+                                                    lineHeight: 1.25,
+                                                    fontWeight: 'bold',
+                                                }}
+                                            >
+                                                {formatBudgetAmount(netto)}
+                                            </Typography>
+                                        </Box>
+                                    )
+                                )}
+                            </Box>
+                        </Box>
+                        <UnfoldMoreIcon sx={{ color: theme.palette.secondary.light, flexShrink: 0, alignSelf: 'center' }} />
                     </Paper>
                 )}
 
