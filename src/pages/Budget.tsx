@@ -2,7 +2,7 @@ import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
 import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -33,6 +33,29 @@ const MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+/** Parse YYYY-MM-DD as a local calendar date (avoids UTC month shift from `new Date("YYYY-MM-DD")`). */
+function monthNameFromYyyyMmDd(dateStr: string | undefined): string | null {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+    if (!m) return null;
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const d = parseInt(m[3], 10);
+    const date = new Date(y, mo, d);
+    if (isNaN(date.getTime())) return null;
+    return MONTHS[date.getMonth()];
+}
+
+/** Month bucket for fun-expense grouping (aligned with save logic). */
+function staticExpenseMonthBucket(staticExpenseDate: string | undefined): string | null {
+    const fromIso = monthNameFromYyyyMmDd(staticExpenseDate);
+    if (fromIso) return fromIso;
+    if (!staticExpenseDate) return null;
+    const d = new Date(staticExpenseDate);
+    if (isNaN(d.getTime())) return null;
+    return MONTHS[d.getMonth()];
+}
 
 const EXPENSE_CATEGORIES = [
     'Housing',
@@ -247,7 +270,6 @@ export default function Budget() {
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     /** After a successful GET for this year; blocks PUT until then so we never overwrite the DB with [] before load. */
     const [budgetDataLoaded, setBudgetDataLoaded] = useState(false);
-    const lineItemsRef = useRef<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
@@ -404,16 +426,11 @@ export default function Budget() {
         };
     }, [currency.code]);
 
-    // Sync before paint so debounced autosave never reads a ref that lags behind React state
-    useLayoutEffect(() => {
-        lineItemsRef.current = lineItems;
-    }, [lineItems]);
-
     // Save budget data whenever lineItems change (only after server data has been loaded once)
     useEffect(() => {
         if (isLoaded && user?.id && year && budgetDataLoaded && !loading) {
             const timeoutId = setTimeout(() => {
-                saveBudgetData();
+                saveBudgetData(lineItems);
             }, 1000);
 
             return () => clearTimeout(timeoutId);
@@ -485,7 +502,6 @@ export default function Budget() {
                     return normalizedItem;
                 });
                 setLineItems(normalizedItems);
-                lineItemsRef.current = normalizedItems;
                 setBudgetDataLoaded(true);
             }
         } catch (error) {
@@ -495,13 +511,12 @@ export default function Budget() {
         }
     };
 
-    const saveBudgetData = async () => {
+    const saveBudgetData = async (itemsToSave: LineItem[]) => {
         if (!user?.id || !year || saving) return;
 
         setSaving(true);
         try {
-            // Always read latest items (debounced save may run after rapid edits)
-            const snapshot = lineItemsRef.current;
+            const snapshot = itemsToSave;
             // Ensure items with static expense properties are marked as static expenses before saving
             // Also merge formulas back into months._formulas for persistence
             // Explicitly include category field to ensure it's saved
@@ -861,6 +876,7 @@ export default function Budget() {
     const handleCellClick = (itemId: string, month: string) => {
         const item = lineItems.find(i => i.id === itemId);
         if (!item) return;
+        if (item.isStaticExpense) return;
 
         // If there's a formula, show it; otherwise show the calculated value
         // Check both formulas field and months._formulas
@@ -882,6 +898,7 @@ export default function Budget() {
         setLineItems((prev) =>
             prev.map((item) => {
                 if (item.id !== cell.itemId) return item;
+                if (item.isStaticExpense) return item;
 
                 const updatedItem = { ...item };
                 const monthsCopy = { ...updatedItem.months };
@@ -2933,32 +2950,13 @@ export default function Budget() {
                         const staticExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
 
                         staticExpenses.forEach(item => {
-                            if (item.staticExpenseDate) {
-                                try {
-                                    const date = new Date(item.staticExpenseDate);
-                                    if (!isNaN(date.getTime())) {
-                                        const monthIndex = date.getMonth();
-                                        const monthName = MONTHS[monthIndex];
-                                        if (!expensesByMonth[monthName]) {
-                                            expensesByMonth[monthName] = [];
-                                        }
-                                        expensesByMonth[monthName].push(item);
-                                    } else {
-                                        // Invalid date, add to uncategorized
-                                        if (!expensesByMonth['Uncategorized']) {
-                                            expensesByMonth['Uncategorized'] = [];
-                                        }
-                                        expensesByMonth['Uncategorized'].push(item);
-                                    }
-                                } catch (e) {
-                                    // Invalid date format, add to uncategorized
-                                    if (!expensesByMonth['Uncategorized']) {
-                                        expensesByMonth['Uncategorized'] = [];
-                                    }
-                                    expensesByMonth['Uncategorized'].push(item);
+                            const bucket = staticExpenseMonthBucket(item.staticExpenseDate);
+                            if (bucket) {
+                                if (!expensesByMonth[bucket]) {
+                                    expensesByMonth[bucket] = [];
                                 }
+                                expensesByMonth[bucket].push(item);
                             } else {
-                                // No date, add to uncategorized
                                 if (!expensesByMonth['Uncategorized']) {
                                     expensesByMonth['Uncategorized'] = [];
                                 }
@@ -3149,6 +3147,7 @@ export default function Budget() {
                                                                             }}
                                                                         >
                                                                             <Button
+                                                                                type="button"
                                                                                 onClick={() => {
                                                                                     if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
                                                                                     const targetId = editingStaticExpense;
@@ -3158,36 +3157,36 @@ export default function Budget() {
                                                                                     const funCat =
                                                                                         (editStaticExpenseCategory && editStaticExpenseCategory.trim()) ||
                                                                                         FUN_EXPENSE_DEFAULT_CATEGORY;
-                                                                                    let monthName = '';
 
-                                                                                    // Validate and parse date (local date: avoid UTC off-by-one for YYYY-MM-DD)
-                                                                                    try {
-                                                                                        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(editStaticExpenseDate.trim());
-                                                                                        if (m) {
-                                                                                            const y = parseInt(m[1], 10);
-                                                                                            const mo = parseInt(m[2], 10) - 1;
-                                                                                            const d = parseInt(m[3], 10);
-                                                                                            const date = new Date(y, mo, d);
-                                                                                            if (!isNaN(date.getTime())) {
-                                                                                                monthName = MONTHS[date.getMonth()];
-                                                                                            }
-                                                                                        } else {
-                                                                                            const date = new Date(editStaticExpenseDate);
-                                                                                            if (!isNaN(date.getTime())) {
-                                                                                                monthName = MONTHS[date.getMonth()];
-                                                                                            }
-                                                                                        }
-                                                                                    } catch (e) {
-                                                                                        // Invalid date, will be handled as uncategorized
-                                                                                    }
-
-                                                                                    setLineItems((prev) => {
-                                                                                        const next = prev.map((li) => {
+                                                                                    setLineItems((prev) =>
+                                                                                        prev.map((li) => {
                                                                                             if (li.id !== targetId) return li;
-                                                                                            const newMonths: { [key: string]: number } = {};
-                                                                                            if (monthName) {
-                                                                                                newMonths[monthName] = price;
+
+                                                                                            let monthName =
+                                                                                                monthNameFromYyyyMmDd(editStaticExpenseDate.trim()) ||
+                                                                                                monthNameFromYyyyMmDd((li.staticExpenseDate || '').trim());
+                                                                                            if (!monthName && li.months) {
+                                                                                                const sole = Object.keys(li.months).filter((k) => k !== '_formulas');
+                                                                                                if (sole.length === 1) monthName = sole[0];
                                                                                             }
+                                                                                            if (!monthName) {
+                                                                                                const d = new Date(editStaticExpenseDate);
+                                                                                                if (!isNaN(d.getTime())) monthName = MONTHS[d.getMonth()];
+                                                                                            }
+
+                                                                                            let newMonths: { [key: string]: number };
+                                                                                            if (monthName) {
+                                                                                                newMonths = { [monthName]: price };
+                                                                                            } else {
+                                                                                                const prevM = { ...(li.months || {}) };
+                                                                                                const keys = Object.keys(prevM).filter((k) => k !== '_formulas');
+                                                                                                if (keys.length === 1) {
+                                                                                                    newMonths = { ...prevM, [keys[0]]: price };
+                                                                                                } else {
+                                                                                                    newMonths = prevM;
+                                                                                                }
+                                                                                            }
+
                                                                                             return {
                                                                                                 ...li,
                                                                                                 name: editStaticExpenseName.trim(),
@@ -3197,10 +3196,8 @@ export default function Budget() {
                                                                                                 isStaticExpense: true,
                                                                                                 category: funCat,
                                                                                             };
-                                                                                        });
-                                                                                        lineItemsRef.current = next;
-                                                                                        return next;
-                                                                                    });
+                                                                                        })
+                                                                                    );
                                                                                     setEditingStaticExpense(null);
                                                                                     setEditStaticExpenseName('');
                                                                                     setEditStaticExpenseDate('');
@@ -3217,6 +3214,7 @@ export default function Budget() {
                                                                                 Save
                                                                             </Button>
                                                                             <Button
+                                                                                type="button"
                                                                                 onClick={() => {
                                                                                     setEditingStaticExpense(null);
                                                                                     setEditStaticExpenseName('');
@@ -3260,6 +3258,8 @@ export default function Budget() {
                                                                         <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                                                                             <IconButton
                                                                                 onClick={() => {
+                                                                                    setEditingCell(null);
+                                                                                    setEditValue('');
                                                                                     setEditingStaticExpense(item.id);
                                                                                     setEditStaticExpenseName(item.name);
                                                                                     setEditStaticExpenseDate(item.staticExpenseDate || '');
