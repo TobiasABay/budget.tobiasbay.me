@@ -249,6 +249,7 @@ export default function Budget() {
     const [editStaticExpenseDate, setEditStaticExpenseDate] = useState('');
     const [editStaticExpensePrice, setEditStaticExpensePrice] = useState('');
     const [editStaticExpenseCategory, setEditStaticExpenseCategory] = useState('');
+    const [funExpenseDeleteId, setFunExpenseDeleteId] = useState<string | null>(null);
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [insightsModalOpen, setInsightsModalOpen] = useState(false);
     const [selectedMonthForChart, setSelectedMonthForChart] = useState<string>('all');
@@ -2993,7 +2994,10 @@ export default function Budget() {
                                                                     padding: '1rem',
                                                                     paddingRight: '0.5rem',
                                                                     display: 'flex',
-                                                                    alignItems: 'center',
+                                                                    flexDirection: isEditing && isMobile ? 'column' : 'row',
+                                                                    flexWrap: isEditing && !isMobile ? 'wrap' : 'nowrap',
+                                                                    alignItems: isEditing && isMobile ? 'stretch' : 'center',
+                                                                    alignContent: isEditing && !isMobile ? 'center' : undefined,
                                                                     gap: isMobile ? 1 : 2,
                                                                     overflow: 'visible',
                                                                     minWidth: 0,
@@ -3009,8 +3013,10 @@ export default function Budget() {
                                                                             value={editStaticExpenseName}
                                                                             onChange={(e) => setEditStaticExpenseName(e.target.value)}
                                                                             size="small"
+                                                                            fullWidth={isMobile}
                                                                             sx={{
-                                                                                flex: 1,
+                                                                                flex: isMobile ? undefined : 1,
+                                                                                minWidth: isMobile ? 0 : 120,
                                                                                 '& .MuiOutlinedInput-root': {
                                                                                     color: theme.palette.text.primary,
                                                                                     '& fieldset': {
@@ -3025,8 +3031,10 @@ export default function Budget() {
                                                                             value={editStaticExpenseDate}
                                                                             onChange={(e) => setEditStaticExpenseDate(e.target.value)}
                                                                             size="small"
+                                                                            fullWidth={isMobile}
                                                                             InputLabelProps={{ shrink: true }}
                                                                             sx={{
+                                                                                minWidth: isMobile ? 0 : 140,
                                                                                 '& .MuiOutlinedInput-root': {
                                                                                     color: theme.palette.text.primary,
                                                                                     '& fieldset': {
@@ -3041,8 +3049,10 @@ export default function Budget() {
                                                                             value={editStaticExpensePrice}
                                                                             onChange={(e) => setEditStaticExpensePrice(e.target.value)}
                                                                             size="small"
+                                                                            fullWidth={isMobile}
                                                                             sx={{
-                                                                                width: '120px',
+                                                                                width: isMobile ? '100%' : '120px',
+                                                                                minWidth: isMobile ? 0 : 120,
                                                                                 '& .MuiOutlinedInput-root': {
                                                                                     color: theme.palette.text.primary,
                                                                                     '& fieldset': {
@@ -3051,7 +3061,11 @@ export default function Budget() {
                                                                                 },
                                                                             }}
                                                                         />
-                                                                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                                                                        <FormControl
+                                                                            size="small"
+                                                                            fullWidth={isMobile}
+                                                                            sx={{ minWidth: isMobile ? 0 : 200 }}
+                                                                        >
                                                                             <InputLabel id={`edit-fun-cat-${item.id}`}>Category</InputLabel>
                                                                             <Select
                                                                                 labelId={`edit-fun-cat-${item.id}`}
@@ -3070,76 +3084,94 @@ export default function Budget() {
                                                                                 ))}
                                                                             </Select>
                                                                         </FormControl>
-                                                                        <Button
-                                                                            onClick={() => {
-                                                                                if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
+                                                                        <Box
+                                                                            sx={{
+                                                                                display: 'flex',
+                                                                                flexWrap: 'wrap',
+                                                                                alignItems: 'center',
+                                                                                gap: 1,
+                                                                                flexShrink: 0,
+                                                                                ...(isMobile && {
+                                                                                    width: '100%',
+                                                                                    pt: 0.5,
+                                                                                    '& > button': {
+                                                                                        flex: '1 1 0',
+                                                                                        minWidth: 0,
+                                                                                    },
+                                                                                }),
+                                                                            }}
+                                                                        >
+                                                                            <Button
+                                                                                onClick={() => {
+                                                                                    if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
 
-                                                                                const price = parseFloat(editStaticExpensePrice) || 0;
-                                                                                const funCat =
-                                                                                    (editStaticExpenseCategory && editStaticExpenseCategory.trim()) ||
-                                                                                    FUN_EXPENSE_DEFAULT_CATEGORY;
-                                                                                let monthName = '';
+                                                                                    const price = parseFloat(editStaticExpensePrice) || 0;
+                                                                                    const funCat =
+                                                                                        (editStaticExpenseCategory && editStaticExpenseCategory.trim()) ||
+                                                                                        FUN_EXPENSE_DEFAULT_CATEGORY;
+                                                                                    let monthName = '';
 
-                                                                                // Validate and parse date
-                                                                                try {
-                                                                                    const date = new Date(editStaticExpenseDate);
-                                                                                    if (!isNaN(date.getTime())) {
-                                                                                        const monthIndex = date.getMonth();
-                                                                                        monthName = MONTHS[monthIndex];
-                                                                                    }
-                                                                                } catch (e) {
-                                                                                    // Invalid date, will be handled as uncategorized
-                                                                                }
-
-                                                                                const updatedItems = lineItems.map(li => {
-                                                                                    if (li.id === item.id) {
-                                                                                        const newMonths: { [key: string]: number } = {};
-                                                                                        if (monthName) {
-                                                                                            newMonths[monthName] = price;
+                                                                                    // Validate and parse date
+                                                                                    try {
+                                                                                        const date = new Date(editStaticExpenseDate);
+                                                                                        if (!isNaN(date.getTime())) {
+                                                                                            const monthIndex = date.getMonth();
+                                                                                            monthName = MONTHS[monthIndex];
                                                                                         }
-                                                                                        return {
-                                                                                            ...li,
-                                                                                            name: editStaticExpenseName.trim(),
-                                                                                            staticExpenseDate: editStaticExpenseDate,
-                                                                                            staticExpensePrice: price,
-                                                                                            months: newMonths,
-                                                                                            isStaticExpense: true, // Explicitly preserve the flag
-                                                                                            category: funCat,
-                                                                                        };
+                                                                                    } catch (e) {
+                                                                                        // Invalid date, will be handled as uncategorized
                                                                                     }
-                                                                                    return li;
-                                                                                });
-                                                                                setLineItems(updatedItems);
-                                                                                setEditingStaticExpense(null);
-                                                                                setEditStaticExpenseName('');
-                                                                                setEditStaticExpenseDate('');
-                                                                                setEditStaticExpensePrice('');
-                                                                                setEditStaticExpenseCategory('');
-                                                                            }}
-                                                                            variant="contained"
-                                                                            size="small"
-                                                                            sx={{
-                                                                                bgcolor: theme.palette.primary.main,
-                                                                                color: theme.palette.primary.contrastText,
-                                                                            }}
-                                                                        >
-                                                                            Save
-                                                                        </Button>
-                                                                        <Button
-                                                                            onClick={() => {
-                                                                                setEditingStaticExpense(null);
-                                                                                setEditStaticExpenseName('');
-                                                                                setEditStaticExpenseDate('');
-                                                                                setEditStaticExpensePrice('');
-                                                                                setEditStaticExpenseCategory('');
-                                                                            }}
-                                                                            size="small"
-                                                                            sx={{
-                                                                                color: theme.palette.text.secondary,
-                                                                            }}
-                                                                        >
-                                                                            Cancel
-                                                                        </Button>
+
+                                                                                    const updatedItems = lineItems.map(li => {
+                                                                                        if (li.id === item.id) {
+                                                                                            const newMonths: { [key: string]: number } = {};
+                                                                                            if (monthName) {
+                                                                                                newMonths[monthName] = price;
+                                                                                            }
+                                                                                            return {
+                                                                                                ...li,
+                                                                                                name: editStaticExpenseName.trim(),
+                                                                                                staticExpenseDate: editStaticExpenseDate,
+                                                                                                staticExpensePrice: price,
+                                                                                                months: newMonths,
+                                                                                                isStaticExpense: true, // Explicitly preserve the flag
+                                                                                                category: funCat,
+                                                                                            };
+                                                                                        }
+                                                                                        return li;
+                                                                                    });
+                                                                                    setLineItems(updatedItems);
+                                                                                    setEditingStaticExpense(null);
+                                                                                    setEditStaticExpenseName('');
+                                                                                    setEditStaticExpenseDate('');
+                                                                                    setEditStaticExpensePrice('');
+                                                                                    setEditStaticExpenseCategory('');
+                                                                                }}
+                                                                                variant="contained"
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    bgcolor: theme.palette.primary.main,
+                                                                                    color: theme.palette.primary.contrastText,
+                                                                                }}
+                                                                            >
+                                                                                Save
+                                                                            </Button>
+                                                                            <Button
+                                                                                onClick={() => {
+                                                                                    setEditingStaticExpense(null);
+                                                                                    setEditStaticExpenseName('');
+                                                                                    setEditStaticExpenseDate('');
+                                                                                    setEditStaticExpensePrice('');
+                                                                                    setEditStaticExpenseCategory('');
+                                                                                }}
+                                                                                size="small"
+                                                                                sx={{
+                                                                                    color: theme.palette.text.secondary,
+                                                                                }}
+                                                                            >
+                                                                                Cancel
+                                                                            </Button>
+                                                                        </Box>
                                                                     </>
                                                                 ) : (
                                                                     <>
@@ -3182,7 +3214,7 @@ export default function Budget() {
                                                                                 <EditIcon />
                                                                             </IconButton>
                                                                             <IconButton
-                                                                                onClick={() => handleDeleteItem(item.id)}
+                                                                                onClick={() => setFunExpenseDeleteId(item.id)}
                                                                                 size="small"
                                                                                 sx={{
                                                                                     color: theme.palette.error.main,
@@ -3205,6 +3237,50 @@ export default function Budget() {
                         );
                     })()}
                 </Paper>
+
+                <Dialog
+                    open={funExpenseDeleteId !== null}
+                    onClose={() => setFunExpenseDeleteId(null)}
+                    maxWidth={false}
+                    PaperProps={{
+                        sx: {
+                            bgcolor: theme.palette.background.paper,
+                            color: theme.palette.text.primary,
+                            maxWidth: 300,
+                            width: 'calc(100vw - 32px)',
+                            m: 2,
+                        },
+                    }}
+                >
+                    <DialogTitle sx={{ color: theme.palette.text.primary, fontSize: '1rem', py: 1.5, px: 2 }}>
+                        Delete fun expense?
+                    </DialogTitle>
+                    <DialogContent sx={{ px: 2, pt: 0, pb: 1 }}>
+                        <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
+                            {funExpenseDeleteId
+                                ? `Remove “${lineItems.find((l) => l.id === funExpenseDeleteId)?.name ?? 'this expense'}”?`
+                                : null}
+                        </Typography>
+                    </DialogContent>
+                    <DialogActions sx={{ px: 2, pb: 1.5, pt: 0, gap: 1 }}>
+                        <Button size="small" onClick={() => setFunExpenseDeleteId(null)} color="inherit">
+                            Cancel
+                        </Button>
+                        <Button
+                            size="small"
+                            variant="contained"
+                            color="error"
+                            onClick={() => {
+                                if (funExpenseDeleteId) {
+                                    handleDeleteItem(funExpenseDeleteId);
+                                    setFunExpenseDeleteId(null);
+                                }
+                            }}
+                        >
+                            Delete
+                        </Button>
+                    </DialogActions>
+                </Dialog>
 
                 <Dialog
                     open={modalOpen}
