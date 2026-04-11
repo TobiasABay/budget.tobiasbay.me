@@ -218,6 +218,21 @@ function getFunExpenseDisplayCategory(item: LineItem): string {
 }
 
 /** Payload shape for PUT /budgets/:year/data (shared so save reads ref once, right before fetch). */
+/** If the API ever returns duplicate `id`s (e.g. legacy data), keep first row and assign new ids to the rest so delete/edit target one row only. */
+function dedupeLineItemIdsForLoad(items: LineItem[]): LineItem[] {
+    const seen = new Set<string>();
+    const out: LineItem[] = [];
+    for (const item of items) {
+        if (!seen.has(item.id)) {
+            seen.add(item.id);
+            out.push(item);
+        } else {
+            out.push({ ...item, id: newLineItemId() });
+        }
+    }
+    return out;
+}
+
 function normalizeLineItemsForSave(snapshot: LineItem[]): any[] {
     return snapshot.map((item: LineItem) => {
         const normalizedItem: any = { ...item };
@@ -542,7 +557,7 @@ export default function Budget() {
                     }
                     return normalizedItem;
                 });
-                setLineItems(normalizedItems);
+                setLineItems(dedupeLineItemIdsForLoad(normalizedItems));
                 setBudgetDataLoaded(true);
             }
         } catch (error) {
@@ -655,14 +670,16 @@ export default function Budget() {
             itemType = 'expense';
         }
 
-        // For static expenses, determine which month the date falls in
+        // For static expenses, determine which month the date falls in (local YYYY-MM-DD, same as Fun Expenses grouping)
         let months: { [key: string]: number } = {};
         if (isStaticExpense && staticExpenseDate) {
-            const date = new Date(staticExpenseDate);
-            const monthIndex = date.getMonth();
-            const monthName = MONTHS[monthIndex];
             const price = parseFloat(staticExpensePrice) || 0;
-            months[monthName] = price;
+            let monthName = monthNameFromYyyyMmDd(staticExpenseDate);
+            if (!monthName) {
+                const d = new Date(staticExpenseDate);
+                if (!isNaN(d.getTime())) monthName = MONTHS[d.getMonth()];
+            }
+            if (monthName) months[monthName] = price;
         }
 
         const newItem: LineItem = {
@@ -975,7 +992,11 @@ export default function Budget() {
 
 
     const handleDeleteItem = (itemId: string) => {
-        setLineItems((prev) => prev.filter((item) => item.id !== itemId));
+        setLineItems((prev) => {
+            const idx = prev.findIndex((item) => item.id === itemId);
+            if (idx === -1) return prev;
+            return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+        });
         setSelectedItemForDelete(null);
     };
 
@@ -3343,6 +3364,7 @@ export default function Budget() {
                             Cancel
                         </Button>
                         <Button
+                            type="button"
                             size="small"
                             variant="contained"
                             color="error"
