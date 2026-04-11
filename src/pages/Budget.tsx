@@ -2,7 +2,7 @@ import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
 import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -404,7 +404,8 @@ export default function Budget() {
         };
     }, [currency.code]);
 
-    useEffect(() => {
+    // Sync before paint so debounced autosave never reads a ref that lags behind React state
+    useLayoutEffect(() => {
         lineItemsRef.current = lineItems;
     }, [lineItems]);
 
@@ -517,10 +518,17 @@ export default function Budget() {
                 if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
                     normalizedItem.isStaticExpense = true;
                 }
+                // JSON omits undefined; backend needs a truthy isStaticExpense to persist static_expense_data
+                if (
+                    item.type === 'expense' &&
+                    (item.isStaticExpense || item.staticExpenseDate)
+                ) {
+                    normalizedItem.isStaticExpense = true;
+                }
 
                 // Explicitly include category field (use null instead of undefined so it's serialized)
                 if (item.type === 'expense') {
-                    if (item.isStaticExpense) {
+                    if (normalizedItem.isStaticExpense) {
                         normalizedItem.category =
                             (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
                     } else {
@@ -3143,6 +3151,8 @@ export default function Budget() {
                                                                             <Button
                                                                                 onClick={() => {
                                                                                     if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
+                                                                                    const targetId = editingStaticExpense;
+                                                                                    if (!targetId) return;
 
                                                                                     const price = parseFloat(editStaticExpensePrice) || 0;
                                                                                     const funCat =
@@ -3150,37 +3160,47 @@ export default function Budget() {
                                                                                         FUN_EXPENSE_DEFAULT_CATEGORY;
                                                                                     let monthName = '';
 
-                                                                                    // Validate and parse date
+                                                                                    // Validate and parse date (local date: avoid UTC off-by-one for YYYY-MM-DD)
                                                                                     try {
-                                                                                        const date = new Date(editStaticExpenseDate);
-                                                                                        if (!isNaN(date.getTime())) {
-                                                                                            const monthIndex = date.getMonth();
-                                                                                            monthName = MONTHS[monthIndex];
+                                                                                        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(editStaticExpenseDate.trim());
+                                                                                        if (m) {
+                                                                                            const y = parseInt(m[1], 10);
+                                                                                            const mo = parseInt(m[2], 10) - 1;
+                                                                                            const d = parseInt(m[3], 10);
+                                                                                            const date = new Date(y, mo, d);
+                                                                                            if (!isNaN(date.getTime())) {
+                                                                                                monthName = MONTHS[date.getMonth()];
+                                                                                            }
+                                                                                        } else {
+                                                                                            const date = new Date(editStaticExpenseDate);
+                                                                                            if (!isNaN(date.getTime())) {
+                                                                                                monthName = MONTHS[date.getMonth()];
+                                                                                            }
                                                                                         }
                                                                                     } catch (e) {
                                                                                         // Invalid date, will be handled as uncategorized
                                                                                     }
 
-                                                                                    setLineItems((prev) =>
-                                                                                        prev.map((li) => {
-                                                                                            if (li.id === item.id) {
-                                                                                                const newMonths: { [key: string]: number } = {};
-                                                                                                if (monthName) {
-                                                                                                    newMonths[monthName] = price;
-                                                                                                }
-                                                                                                return {
-                                                                                                    ...li,
-                                                                                                    name: editStaticExpenseName.trim(),
-                                                                                                    staticExpenseDate: editStaticExpenseDate,
-                                                                                                    staticExpensePrice: price,
-                                                                                                    months: newMonths,
-                                                                                                    isStaticExpense: true, // Explicitly preserve the flag
-                                                                                                    category: funCat,
-                                                                                                };
+                                                                                    setLineItems((prev) => {
+                                                                                        const next = prev.map((li) => {
+                                                                                            if (li.id !== targetId) return li;
+                                                                                            const newMonths: { [key: string]: number } = {};
+                                                                                            if (monthName) {
+                                                                                                newMonths[monthName] = price;
                                                                                             }
-                                                                                            return li;
-                                                                                        })
-                                                                                    );
+                                                                                            return {
+                                                                                                ...li,
+                                                                                                name: editStaticExpenseName.trim(),
+                                                                                                staticExpenseDate: editStaticExpenseDate,
+                                                                                                staticExpensePrice: price,
+                                                                                                months: newMonths,
+                                                                                                isStaticExpense: true,
+                                                                                                category: funCat,
+                                                                                            };
+                                                                                        });
+                                                                                        lineItemsRef.current = next;
+                                                                                        return next;
+                                                                                    });
                                                                                     setEditingStaticExpense(null);
                                                                                     setEditStaticExpenseName('');
                                                                                     setEditStaticExpenseDate('');
