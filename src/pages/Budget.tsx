@@ -217,6 +217,37 @@ function getFunExpenseDisplayCategory(item: LineItem): string {
     return c || FUN_EXPENSE_DEFAULT_CATEGORY;
 }
 
+/** Payload shape for PUT /budgets/:year/data (shared so save reads ref once, right before fetch). */
+function normalizeLineItemsForSave(snapshot: LineItem[]): any[] {
+    return snapshot.map((item: LineItem) => {
+        const normalizedItem: any = { ...item };
+
+        if (item.formulas && Object.keys(item.formulas).length > 0) {
+            const monthsWithFormulas = { ...item.months };
+            (monthsWithFormulas as any)._formulas = item.formulas;
+            normalizedItem.months = monthsWithFormulas;
+        }
+
+        if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
+            normalizedItem.isStaticExpense = true;
+        }
+        if (item.type === 'expense' && (item.isStaticExpense || item.staticExpenseDate)) {
+            normalizedItem.isStaticExpense = true;
+        }
+
+        if (item.type === 'expense') {
+            if (normalizedItem.isStaticExpense) {
+                normalizedItem.category =
+                    (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
+            } else {
+                normalizedItem.category = (item.category && item.category.trim()) || null;
+            }
+        }
+
+        return normalizedItem;
+    });
+}
+
 function compareRegularExpenseRows(a: LineItem, b: LineItem): number {
     const rawA = (a.category && a.category.trim()) || 'Other';
     const rawB = (b.category && b.category.trim()) || 'Other';
@@ -275,6 +306,8 @@ export default function Budget() {
     const [loading, setLoading] = useState(true);
     /** Always matches committed `lineItems` so autosave reads the latest snapshot (never a stale closure). */
     const lineItemsRef = useRef<LineItem[]>([]);
+    /** Bumps whenever `lineItems` commits so we can detect edits during an in-flight PUT and save again. */
+    const saveGenerationRef = useRef(0);
     /** Serializes PUTs; each job reads `lineItemsRef` at run time so overlapping saves are never dropped. */
     const saveChainRef = useRef<Promise<void>>(Promise.resolve());
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -431,6 +464,7 @@ export default function Budget() {
 
     useLayoutEffect(() => {
         lineItemsRef.current = lineItems;
+        saveGenerationRef.current += 1;
     }, [lineItems]);
 
     // Save budget data whenever lineItems change (only after server data has been loaded once)
@@ -527,43 +561,11 @@ export default function Budget() {
             })
             .then(async () => {
                 try {
+                    const genAtSend = saveGenerationRef.current;
+                    // Read ref immediately before building the body so this PUT matches the latest commit
+                    // (avoids a slow request finishing with an older snapshot after add + rename).
                     const snapshot = lineItemsRef.current;
-                    // Ensure items with static expense properties are marked as static expenses before saving
-                    // Also merge formulas back into months._formulas for persistence
-                    // Explicitly include category field to ensure it's saved
-                    const normalizedItems = snapshot.map((item: LineItem) => {
-                        const normalizedItem: any = { ...item }; // Includes all fields: name, type, months, category, etc.
-
-                        // Merge formulas back into months._formulas if they exist
-                        if (item.formulas && Object.keys(item.formulas).length > 0) {
-                            const monthsWithFormulas = { ...item.months };
-                            (monthsWithFormulas as any)._formulas = item.formulas;
-                            normalizedItem.months = monthsWithFormulas;
-                        }
-
-                        if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
-                            normalizedItem.isStaticExpense = true;
-                        }
-                        // JSON omits undefined; backend needs a truthy isStaticExpense to persist static_expense_data
-                        if (
-                            item.type === 'expense' &&
-                            (item.isStaticExpense || item.staticExpenseDate)
-                        ) {
-                            normalizedItem.isStaticExpense = true;
-                        }
-
-                        // Explicitly include category field (use null instead of undefined so it's serialized)
-                        if (item.type === 'expense') {
-                            if (normalizedItem.isStaticExpense) {
-                                normalizedItem.category =
-                                    (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
-                            } else {
-                                normalizedItem.category = (item.category && item.category.trim()) || null;
-                            }
-                        }
-
-                        return normalizedItem;
-                    });
+                    const normalizedItems = normalizeLineItemsForSave(snapshot);
 
                     const encodedYear = encodeURIComponent(year);
                     const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
@@ -577,6 +579,10 @@ export default function Budget() {
 
                     if (!response.ok) {
                         throw new Error('Failed to save budget data');
+                    }
+
+                    if (saveGenerationRef.current !== genAtSend) {
+                        queueSaveBudgetData();
                     }
                 } catch (error) {
                     console.error('Error saving budget data:', error);
