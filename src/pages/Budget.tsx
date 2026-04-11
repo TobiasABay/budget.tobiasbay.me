@@ -2,7 +2,7 @@ import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
 import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -273,7 +273,10 @@ export default function Budget() {
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    /** Always matches committed `lineItems` so autosave reads the latest snapshot (never a stale closure). */
+    const lineItemsRef = useRef<LineItem[]>([]);
+    /** Serializes PUTs; each job reads `lineItemsRef` at run time so overlapping saves are never dropped. */
+    const saveChainRef = useRef<Promise<void>>(Promise.resolve());
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [selectedItemForDelete, setSelectedItemForDelete] = useState<string | null>(null);
     const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
@@ -426,11 +429,15 @@ export default function Budget() {
         };
     }, [currency.code]);
 
+    useLayoutEffect(() => {
+        lineItemsRef.current = lineItems;
+    }, [lineItems]);
+
     // Save budget data whenever lineItems change (only after server data has been loaded once)
     useEffect(() => {
         if (isLoaded && user?.id && year && budgetDataLoaded && !loading) {
             const timeoutId = setTimeout(() => {
-                saveBudgetData(lineItems);
+                queueSaveBudgetData();
             }, 1000);
 
             return () => clearTimeout(timeoutId);
@@ -511,67 +518,70 @@ export default function Budget() {
         }
     };
 
-    const saveBudgetData = async (itemsToSave: LineItem[]) => {
-        if (!user?.id || !year || saving) return;
+    const queueSaveBudgetData = () => {
+        if (!user?.id || !year) return;
 
-        setSaving(true);
-        try {
-            const snapshot = itemsToSave;
-            // Ensure items with static expense properties are marked as static expenses before saving
-            // Also merge formulas back into months._formulas for persistence
-            // Explicitly include category field to ensure it's saved
-            const normalizedItems = snapshot.map((item: LineItem) => {
-                const normalizedItem: any = { ...item }; // Includes all fields: name, type, months, category, etc.
+        saveChainRef.current = saveChainRef.current
+            .catch(() => {
+                /* keep chain alive if a prior save rejected unexpectedly */
+            })
+            .then(async () => {
+                try {
+                    const snapshot = lineItemsRef.current;
+                    // Ensure items with static expense properties are marked as static expenses before saving
+                    // Also merge formulas back into months._formulas for persistence
+                    // Explicitly include category field to ensure it's saved
+                    const normalizedItems = snapshot.map((item: LineItem) => {
+                        const normalizedItem: any = { ...item }; // Includes all fields: name, type, months, category, etc.
 
-                // Merge formulas back into months._formulas if they exist
-                if (item.formulas && Object.keys(item.formulas).length > 0) {
-                    const monthsWithFormulas = { ...item.months };
-                    (monthsWithFormulas as any)._formulas = item.formulas;
-                    normalizedItem.months = monthsWithFormulas;
-                }
+                        // Merge formulas back into months._formulas if they exist
+                        if (item.formulas && Object.keys(item.formulas).length > 0) {
+                            const monthsWithFormulas = { ...item.months };
+                            (monthsWithFormulas as any)._formulas = item.formulas;
+                            normalizedItem.months = monthsWithFormulas;
+                        }
 
-                if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
-                    normalizedItem.isStaticExpense = true;
-                }
-                // JSON omits undefined; backend needs a truthy isStaticExpense to persist static_expense_data
-                if (
-                    item.type === 'expense' &&
-                    (item.isStaticExpense || item.staticExpenseDate)
-                ) {
-                    normalizedItem.isStaticExpense = true;
-                }
+                        if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
+                            normalizedItem.isStaticExpense = true;
+                        }
+                        // JSON omits undefined; backend needs a truthy isStaticExpense to persist static_expense_data
+                        if (
+                            item.type === 'expense' &&
+                            (item.isStaticExpense || item.staticExpenseDate)
+                        ) {
+                            normalizedItem.isStaticExpense = true;
+                        }
 
-                // Explicitly include category field (use null instead of undefined so it's serialized)
-                if (item.type === 'expense') {
-                    if (normalizedItem.isStaticExpense) {
-                        normalizedItem.category =
-                            (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
-                    } else {
-                        normalizedItem.category = (item.category && item.category.trim()) || null;
+                        // Explicitly include category field (use null instead of undefined so it's serialized)
+                        if (item.type === 'expense') {
+                            if (normalizedItem.isStaticExpense) {
+                                normalizedItem.category =
+                                    (item.category && item.category.trim()) || FUN_EXPENSE_DEFAULT_CATEGORY;
+                            } else {
+                                normalizedItem.category = (item.category && item.category.trim()) || null;
+                            }
+                        }
+
+                        return normalizedItem;
+                    });
+
+                    const encodedYear = encodeURIComponent(year);
+                    const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-User-Id': user.id,
+                        },
+                        body: JSON.stringify({ items: normalizedItems }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to save budget data');
                     }
+                } catch (error) {
+                    console.error('Error saving budget data:', error);
                 }
-
-                return normalizedItem;
             });
-
-            const encodedYear = encodeURIComponent(year);
-            const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': user.id,
-                },
-                body: JSON.stringify({ items: normalizedItems }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to save budget data');
-            }
-        } catch (error) {
-            console.error('Error saving budget data:', error);
-        } finally {
-            setSaving(false);
-        }
     };
 
     const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
