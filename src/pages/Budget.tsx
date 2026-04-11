@@ -245,6 +245,9 @@ export default function Budget() {
     const [expenseCategory, setExpenseCategory] = useState<string>('');
     const [loans, setLoans] = useState<Loan[]>([]);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
+    /** After a successful GET for this year; blocks PUT until then so we never overwrite the DB with [] before load. */
+    const [budgetDataLoaded, setBudgetDataLoaded] = useState(false);
+    const lineItemsRef = useRef<LineItem[]>([]);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
     const [editValue, setEditValue] = useState('');
     const [loading, setLoading] = useState(true);
@@ -400,17 +403,20 @@ export default function Budget() {
         };
     }, [currency.code]);
 
-    // Save budget data whenever lineItems change
     useEffect(() => {
-        if (isLoaded && user?.id && year && lineItems.length >= 0 && !loading) {
-            // Debounce saves to avoid too many API calls
+        lineItemsRef.current = lineItems;
+    }, [lineItems]);
+
+    // Save budget data whenever lineItems change (only after server data has been loaded once)
+    useEffect(() => {
+        if (isLoaded && user?.id && year && budgetDataLoaded && !loading) {
             const timeoutId = setTimeout(() => {
                 saveBudgetData();
             }, 1000);
 
             return () => clearTimeout(timeoutId);
         }
-    }, [lineItems, isLoaded, user?.id, year]);
+    }, [lineItems, isLoaded, user?.id, year, budgetDataLoaded, loading]);
 
     const loadLoans = async () => {
         if (!user?.id) return;
@@ -437,6 +443,7 @@ export default function Budget() {
         if (!user?.id || !year) return;
 
         setLoading(true);
+        setBudgetDataLoaded(false);
         try {
             const encodedYear = encodeURIComponent(year);
             const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
@@ -476,6 +483,8 @@ export default function Budget() {
                     return normalizedItem;
                 });
                 setLineItems(normalizedItems);
+                lineItemsRef.current = normalizedItems;
+                setBudgetDataLoaded(true);
             }
         } catch (error) {
             console.error('Error loading budget data:', error);
@@ -489,10 +498,12 @@ export default function Budget() {
 
         setSaving(true);
         try {
+            // Always read latest items (debounced save may run after rapid edits)
+            const snapshot = lineItemsRef.current;
             // Ensure items with static expense properties are marked as static expenses before saving
             // Also merge formulas back into months._formulas for persistence
             // Explicitly include category field to ensure it's saved
-            const normalizedItems = lineItems.map((item: LineItem) => {
+            const normalizedItems = snapshot.map((item: LineItem) => {
                 const normalizedItem: any = { ...item }; // Includes all fields: name, type, months, category, etc.
 
                 // Merge formulas back into months._formulas if they exist
