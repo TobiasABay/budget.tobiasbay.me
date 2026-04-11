@@ -61,6 +61,14 @@ const FUN_EXPENSE_CATEGORIES = [
 
 const FUN_EXPENSE_DEFAULT_CATEGORY: (typeof FUN_EXPENSE_CATEGORIES)[number] = 'Other';
 
+/** Unique id for new line items (avoids collisions from Date.now() and duplicate deletes). */
+function newLineItemId(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 /** Map Taggun verbose JSON → line items for the receipt review UI. */
 function parseTaggunReceiptJson(json: unknown): {
     merchant: string;
@@ -575,6 +583,8 @@ export default function Budget() {
     };
 
     const handleCreateItem = () => {
+        if (loading) return;
+
         if (isLoan) {
             if (!loanTitle.trim() || !loanStartDate || !loanValue) return;
         } else if (isStaticExpense) {
@@ -605,7 +615,7 @@ export default function Budget() {
         }
 
         const newItem: LineItem = {
-            id: Date.now().toString(),
+            id: newLineItemId(),
             name: isLoan ? loanTitle.trim() : isStaticExpense ? staticExpenseName.trim() : itemName.trim(),
             type: itemType,
             amount: 0,
@@ -632,46 +642,72 @@ export default function Budget() {
             })
         };
 
-        // Insert the new item in the correct position based on its type
-        let updatedItems: LineItem[];
-        if (itemType === 'income') {
-            // Insert income items at the end of all income items
-            const incomeItems = lineItems.filter(item => item.type === 'income');
-            const expenseItems = lineItems.filter(item => item.type === 'expense');
-            updatedItems = [...incomeItems, newItem, ...expenseItems];
-        } else {
-            // For expenses, insert based on the expense type
-            const incomeItems = lineItems.filter(item => item.type === 'income');
-            const regularExpenses = lineItems.filter(item =>
-                item.type === 'expense' && !item.isLoan && !item.isStaticExpense && !item.linkedLoanId
-            );
-            const loanLinkedExpenses = lineItems.filter(item =>
-                item.type === 'expense' && !item.isLoan && !item.isStaticExpense && item.linkedLoanId
-            );
-            const staticExpenses = lineItems.filter(item =>
-                item.type === 'expense' && item.isStaticExpense
-            );
-            const loanItems = lineItems.filter(item =>
-                item.type === 'expense' && item.isLoan
-            );
-
-            // Insert new expense in the appropriate section
-            if (isStaticExpense) {
-                // Static expenses go before loans
-                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, ...staticExpenses, newItem, ...loanItems];
-            } else if (isLoan) {
-                // Loan items go at the end of expenses
-                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, ...staticExpenses, ...loanItems, newItem];
-            } else if (linkedLoanId) {
-                // Loan-linked expenses go after regular expenses
-                updatedItems = [...incomeItems, ...regularExpenses, ...loanLinkedExpenses, newItem, ...staticExpenses, ...loanItems];
-            } else {
-                // Regular expenses go first in the expense section
-                updatedItems = [...incomeItems, ...regularExpenses, newItem, ...loanLinkedExpenses, ...staticExpenses, ...loanItems];
+        // Always merge from latest lineItems (functional update) so concurrent edits / saves
+        // cannot drop rows due to a stale closure.
+        setLineItems((prev) => {
+            if (itemType === 'income') {
+                const incomeItems = prev.filter((item) => item.type === 'income');
+                const expenseItems = prev.filter((item) => item.type === 'expense');
+                return [...incomeItems, newItem, ...expenseItems];
             }
-        }
 
-        setLineItems(updatedItems);
+            const incomeItems = prev.filter((item) => item.type === 'income');
+            const regularExpenses = prev.filter(
+                (item) =>
+                    item.type === 'expense' &&
+                    !item.isLoan &&
+                    !item.isStaticExpense &&
+                    !item.linkedLoanId
+            );
+            const loanLinkedExpenses = prev.filter(
+                (item) =>
+                    item.type === 'expense' &&
+                    !item.isLoan &&
+                    !item.isStaticExpense &&
+                    item.linkedLoanId
+            );
+            const staticExpenses = prev.filter((item) => item.type === 'expense' && item.isStaticExpense);
+            const loanItems = prev.filter((item) => item.type === 'expense' && item.isLoan);
+
+            if (isStaticExpense) {
+                return [
+                    ...incomeItems,
+                    ...regularExpenses,
+                    ...loanLinkedExpenses,
+                    ...staticExpenses,
+                    newItem,
+                    ...loanItems,
+                ];
+            }
+            if (isLoan) {
+                return [
+                    ...incomeItems,
+                    ...regularExpenses,
+                    ...loanLinkedExpenses,
+                    ...staticExpenses,
+                    ...loanItems,
+                    newItem,
+                ];
+            }
+            if (linkedLoanId) {
+                return [
+                    ...incomeItems,
+                    ...regularExpenses,
+                    ...loanLinkedExpenses,
+                    newItem,
+                    ...staticExpenses,
+                    ...loanItems,
+                ];
+            }
+            return [
+                ...incomeItems,
+                ...regularExpenses,
+                newItem,
+                ...loanLinkedExpenses,
+                ...staticExpenses,
+                ...loanItems,
+            ];
+        });
         handleCloseModal();
     };
 
@@ -886,8 +922,7 @@ export default function Budget() {
 
 
     const handleDeleteItem = (itemId: string) => {
-        const updatedItems = lineItems.filter(item => item.id !== itemId);
-        setLineItems(updatedItems);
+        setLineItems((prev) => prev.filter((item) => item.id !== itemId));
         setSelectedItemForDelete(null);
     };
 
@@ -3629,7 +3664,14 @@ export default function Budget() {
                     <DialogActions>
                         <Button
                             onClick={handleCreateItem}
-                            disabled={isLoan ? (!loanTitle.trim() || !loanStartDate || !loanValue) : isStaticExpense ? (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) : (!selectedType || !itemName.trim() || (selectedType === 'expense' && !expenseCategory))}
+                            disabled={
+                                loading ||
+                                (isLoan
+                                    ? !loanTitle.trim() || !loanStartDate || !loanValue
+                                    : isStaticExpense
+                                      ? !staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice
+                                      : !selectedType || !itemName.trim() || (selectedType === 'expense' && !expenseCategory))
+                            }
                             variant="contained"
                             sx={{
                                 color: isLoan
