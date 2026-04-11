@@ -311,17 +311,18 @@ export default function Budget() {
     const handleSaveExpenseEdit = () => {
         if (!editingExpenseItem || !editExpenseName.trim()) return;
 
-        const updatedItems = lineItems.map(item => {
-            if (item.id === editingExpenseItem.id) {
-                return {
-                    ...item,
-                    name: editExpenseName.trim(),
-                    category: editExpenseCategory.trim() || null
-                };
-            }
-            return item;
-        });
-        setLineItems(updatedItems);
+        setLineItems((prev) =>
+            prev.map((item) => {
+                if (item.id === editingExpenseItem.id) {
+                    return {
+                        ...item,
+                        name: editExpenseName.trim(),
+                        category: editExpenseCategory.trim() || null
+                    };
+                }
+                return item;
+            })
+        );
         handleCloseEditExpenseModal();
     };
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -868,9 +869,12 @@ export default function Budget() {
 
         const trimmedValue = editValue.trim();
         const isFormula = trimmedValue.startsWith('=');
+        const cell = editingCell;
 
-        const updatedItems = lineItems.map(item => {
-            if (item.id === editingCell.itemId) {
+        setLineItems((prev) =>
+            prev.map((item) => {
+                if (item.id !== cell.itemId) return item;
+
                 const updatedItem = { ...item };
                 const monthsCopy = { ...updatedItem.months };
 
@@ -880,40 +884,37 @@ export default function Budget() {
                     if (!(monthsCopy as any)._formulas) {
                         (monthsCopy as any)._formulas = {};
                     }
-                    (monthsCopy as any)._formulas[editingCell.month] = trimmedValue;
+                    (monthsCopy as any)._formulas[cell.month] = trimmedValue;
 
                     updatedItem.formulas = {
                         ...(updatedItem.formulas || {}),
-                        [editingCell.month]: trimmedValue
+                        [cell.month]: trimmedValue
                     };
                     // Calculate and store the result
                     const calculatedValue = evaluateFormula(trimmedValue);
-                    monthsCopy[editingCell.month] = calculatedValue;
+                    monthsCopy[cell.month] = calculatedValue;
                     updatedItem.months = monthsCopy;
                 } else {
                     // Remove formula if it exists and store direct value
                     if ((monthsCopy as any)._formulas) {
-                        delete (monthsCopy as any)._formulas[editingCell.month];
+                        delete (monthsCopy as any)._formulas[cell.month];
                         // Clean up empty _formulas object
                         if (Object.keys((monthsCopy as any)._formulas).length === 0) {
                             delete (monthsCopy as any)._formulas;
                         }
                     }
                     if (updatedItem.formulas) {
-                        const { [editingCell.month]: removed, ...restFormulas } = updatedItem.formulas;
+                        const { [cell.month]: removed, ...restFormulas } = updatedItem.formulas;
                         updatedItem.formulas = Object.keys(restFormulas).length > 0 ? restFormulas : undefined;
                     }
                     const numericValue = parseFloat(trimmedValue) || 0;
-                    monthsCopy[editingCell.month] = numericValue;
+                    monthsCopy[cell.month] = numericValue;
                     updatedItem.months = monthsCopy;
                 }
 
                 return updatedItem;
-            }
-            return item;
-        });
-
-        setLineItems(updatedItems);
+            })
+        );
         setEditingCell(null);
         setEditValue('');
     };
@@ -967,36 +968,28 @@ export default function Budget() {
             return;
         }
 
-        const draggedItem = lineItems.find(item => item.id === draggedItemId);
-        if (!draggedItem || draggedItem.type !== itemType) {
-            setDraggedItemId(null);
-            setDragOverItemId(null);
-            return;
-        }
+        setLineItems((state) => {
+            const draggedItem = state.find((item) => item.id === draggedItemId);
+            if (!draggedItem || draggedItem.type !== itemType) {
+                return state;
+            }
 
-        // Find the actual indices in the full lineItems array
-        const draggedIndex = lineItems.findIndex(item => item.id === draggedItemId);
-        const targetIndex = lineItems.findIndex(item => item.id === targetItemId);
+            const draggedIndex = state.findIndex((item) => item.id === draggedItemId);
+            const targetIndex = state.findIndex((item) => item.id === targetItemId);
 
-        if (draggedIndex === -1 || targetIndex === -1) {
-            setDraggedItemId(null);
-            setDragOverItemId(null);
-            return;
-        }
+            if (draggedIndex === -1 || targetIndex === -1) {
+                return state;
+            }
 
-        // Only allow reordering within the same type
-        if (lineItems[draggedIndex].type !== lineItems[targetIndex].type) {
-            setDraggedItemId(null);
-            setDragOverItemId(null);
-            return;
-        }
+            if (state[draggedIndex].type !== state[targetIndex].type) {
+                return state;
+            }
 
-        // Reorder items in the array
-        const updatedItems = [...lineItems];
-        const [removed] = updatedItems.splice(draggedIndex, 1);
-        updatedItems.splice(targetIndex, 0, removed);
-
-        setLineItems(updatedItems);
+            const next = [...state];
+            const [removed] = next.splice(draggedIndex, 1);
+            next.splice(targetIndex, 0, removed);
+            return next;
+        });
         setDraggedItemId(null);
         setDragOverItemId(null);
     };
@@ -3168,25 +3161,26 @@ export default function Budget() {
                                                                                         // Invalid date, will be handled as uncategorized
                                                                                     }
 
-                                                                                    const updatedItems = lineItems.map(li => {
-                                                                                        if (li.id === item.id) {
-                                                                                            const newMonths: { [key: string]: number } = {};
-                                                                                            if (monthName) {
-                                                                                                newMonths[monthName] = price;
+                                                                                    setLineItems((prev) =>
+                                                                                        prev.map((li) => {
+                                                                                            if (li.id === item.id) {
+                                                                                                const newMonths: { [key: string]: number } = {};
+                                                                                                if (monthName) {
+                                                                                                    newMonths[monthName] = price;
+                                                                                                }
+                                                                                                return {
+                                                                                                    ...li,
+                                                                                                    name: editStaticExpenseName.trim(),
+                                                                                                    staticExpenseDate: editStaticExpenseDate,
+                                                                                                    staticExpensePrice: price,
+                                                                                                    months: newMonths,
+                                                                                                    isStaticExpense: true, // Explicitly preserve the flag
+                                                                                                    category: funCat,
+                                                                                                };
                                                                                             }
-                                                                                            return {
-                                                                                                ...li,
-                                                                                                name: editStaticExpenseName.trim(),
-                                                                                                staticExpenseDate: editStaticExpenseDate,
-                                                                                                staticExpensePrice: price,
-                                                                                                months: newMonths,
-                                                                                                isStaticExpense: true, // Explicitly preserve the flag
-                                                                                                category: funCat,
-                                                                                            };
-                                                                                        }
-                                                                                        return li;
-                                                                                    });
-                                                                                    setLineItems(updatedItems);
+                                                                                            return li;
+                                                                                        })
+                                                                                    );
                                                                                     setEditingStaticExpense(null);
                                                                                     setEditStaticExpenseName('');
                                                                                     setEditStaticExpenseDate('');
