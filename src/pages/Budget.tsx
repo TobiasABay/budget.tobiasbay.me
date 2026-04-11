@@ -654,7 +654,7 @@ export default function Budget() {
         if (isLoan) {
             if (!loanTitle.trim() || !loanStartDate || !loanValue) return;
         } else if (isStaticExpense) {
-            if (!staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice) return;
+            if (!staticExpenseName.trim() || !staticExpenseDate || staticExpensePrice === '') return;
         } else {
             if (!itemName.trim() || !selectedType) return;
         }
@@ -3186,7 +3186,12 @@ export default function Budget() {
                                                                             <Button
                                                                                 type="button"
                                                                                 onClick={() => {
-                                                                                    if (!editStaticExpenseName.trim() || !editStaticExpenseDate || !editStaticExpensePrice) return;
+                                                                                    if (
+                                                                                        !editStaticExpenseName.trim() ||
+                                                                                        !editStaticExpenseDate ||
+                                                                                        String(editStaticExpensePrice ?? '').trim() === ''
+                                                                                    )
+                                                                                        return;
                                                                                     const targetId = editingStaticExpense;
                                                                                     if (!targetId) return;
 
@@ -3732,7 +3737,7 @@ export default function Budget() {
                                 (isLoan
                                     ? !loanTitle.trim() || !loanStartDate || !loanValue
                                     : isStaticExpense
-                                      ? !staticExpenseName.trim() || !staticExpenseDate || !staticExpensePrice
+                                      ? !staticExpenseName.trim() || !staticExpenseDate || staticExpensePrice === ''
                                       : !selectedType || !itemName.trim() || (selectedType === 'expense' && !expenseCategory))
                             }
                             variant="contained"
