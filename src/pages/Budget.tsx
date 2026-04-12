@@ -1181,29 +1181,58 @@ export default function Budget() {
         const funExpenseCategoryBreakdown = Object.entries(funExpenseCategoryTotals)
             .map(([category, amount]) => ({ category, amount }))
             .filter((row) => row.amount > 0)
-            .sort((a, b) => b.amount - a.amount);
+            .sort(
+                (a, b) =>
+                    b.amount - a.amount ||
+                    a.category.localeCompare(b.category, undefined, { sensitivity: 'base' })
+            );
 
-        // Calculate expenses by category
-        const expensesByCategory: { [key: string]: number } = {};
+        // Annual category totals (full year) — used for benchmark vs typical mix only
+        const annualExpensesByCategory: { [key: string]: number } = {};
         lineItems
-            .filter(item => item.type === 'expense' && !isNordnetItem(item))
-            .forEach(item => {
+            .filter((item) => item.type === 'expense' && !isNordnetItem(item))
+            .forEach((item) => {
                 const category = item.category || 'Other';
                 const categoryTotal = MONTHS.reduce((sum, month) => {
                     return sum + (item.months[month] || 0);
                 }, 0);
-                expensesByCategory[category] = (expensesByCategory[category] || 0) + categoryTotal;
+                annualExpensesByCategory[category] = (annualExpensesByCategory[category] || 0) + categoryTotal;
             });
 
-        const categoryBreakdown = Object.entries(expensesByCategory)
+        // Same month scope as Fun Expenses Breakdown: all months vs single month column
+        const expensesByCategoryScoped: { [key: string]: number } = {};
+        lineItems
+            .filter((item) => item.type === 'expense' && !isNordnetItem(item))
+            .forEach((item) => {
+                const category = item.category || 'Other';
+                let categoryTotal = 0;
+                if (!selectedMonth || selectedMonth === 'all') {
+                    categoryTotal = MONTHS.reduce((sum, month) => sum + (item.months[month] || 0), 0);
+                } else {
+                    categoryTotal = item.months[selectedMonth] || 0;
+                }
+                if (categoryTotal === 0) return;
+                expensesByCategoryScoped[category] = (expensesByCategoryScoped[category] || 0) + categoryTotal;
+            });
+
+        const categoryBreakdown = Object.entries(expensesByCategoryScoped)
             .map(([category, amount]) => ({ category, amount }))
-            .sort((a, b) => b.amount - a.amount);
+            .sort(
+                (a, b) =>
+                    b.amount - a.amount ||
+                    a.category.localeCompare(b.category, undefined, { sensitivity: 'base' })
+            );
+
+        const totalExpenseForCategoryScope =
+            !selectedMonth || selectedMonth === 'all'
+                ? totalExpense
+                : monthlyData.find((m) => m.month === selectedMonth)?.expense ?? 0;
 
         const benchmarkSimilarityScore =
             totalExpense > 0
                 ? Math.round(
                     cosineSimilarity01(
-                        EXPENSE_CATEGORIES.map((cat) => (expensesByCategory[cat] || 0) / totalExpense),
+                        EXPENSE_CATEGORIES.map((cat) => (annualExpensesByCategory[cat] || 0) / totalExpense),
                         EXPENSE_CATEGORIES.map((cat) => BENCHMARK_ONE_PERSON_EXPENSE_SHARES[cat])
                     ) * 100
                 )
@@ -1225,6 +1254,7 @@ export default function Budget() {
             totalFunExpenses,
             funExpenseCategoryBreakdown,
             categoryBreakdown,
+            totalExpenseForCategoryScope,
             benchmarkSimilarityScore
         };
     };
@@ -4402,6 +4432,7 @@ export default function Budget() {
                                                             },
                                                         }}
                                                         MenuProps={{
+                                                            disableScrollLock: true,
                                                             PaperProps: {
                                                                 sx: {
                                                                     bgcolor: theme.palette.background.paper,
@@ -4611,11 +4642,63 @@ export default function Budget() {
                                     {/* Fun expense categories (same scope as fun-expense pie: month filter or all) */}
                                     {insights.funExpenseCategoryBreakdown.length > 0 && (
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography variant="h6" sx={{ mb: 0.5, color: theme.palette.text.primary }}>
-                                                Fun expenses by category
-                                            </Typography>
+                                            <Box
+                                                sx={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: (isMobile || isTablet) ? 'flex-start' : 'center',
+                                                    mb: 0.5,
+                                                    flexDirection: (isMobile || isTablet) ? 'column' : 'row',
+                                                    gap: (isMobile || isTablet) ? 1 : 0,
+                                                }}
+                                            >
+                                                <Typography
+                                                    variant="h6"
+                                                    sx={{
+                                                        color: theme.palette.text.primary,
+                                                        fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem',
+                                                    }}
+                                                >
+                                                    Fun expenses by category
+                                                </Typography>
+                                                <FormControl size="small" sx={{ minWidth: (isMobile || isTablet) ? '100%' : 150 }}>
+                                                    <Select
+                                                        value={selectedMonthForChart}
+                                                        onChange={(e) => setSelectedMonthForChart(e.target.value)}
+                                                        sx={{
+                                                            color: theme.palette.text.primary,
+                                                            fontSize: isMobile ? '0.875rem' : isTablet ? '0.9rem' : '1rem',
+                                                            '& .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.secondary.main,
+                                                            },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                        }}
+                                                        MenuProps={{
+                                                            disableScrollLock: true,
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.palette.background.paper,
+                                                                    color: theme.palette.text.primary,
+                                                                },
+                                                            },
+                                                        }}
+                                                    >
+                                                        <MenuItem value="all">All Months</MenuItem>
+                                                        {MONTHS.map((month) => (
+                                                            <MenuItem key={month} value={month}>
+                                                                {month}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Box>
                                             <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, mb: 2 }}>
-                                                Totals for the fun-expense period selected above (single month or full year).
+                                                Sorted by amount (highest first), then category name.
                                             </Typography>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                                                 {insights.funExpenseCategoryBreakdown.map((row, index) => {
@@ -4667,12 +4750,70 @@ export default function Budget() {
                                     {/* Category Breakdown */}
                                     {insights.categoryBreakdown.length > 0 && (
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary }}>
-                                                Expenses by Category
+                                            <Box
+                                                sx={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: (isMobile || isTablet) ? 'flex-start' : 'center',
+                                                    mb: 0.5,
+                                                    flexDirection: (isMobile || isTablet) ? 'column' : 'row',
+                                                    gap: (isMobile || isTablet) ? 1 : 0,
+                                                }}
+                                            >
+                                                <Typography
+                                                    variant="h6"
+                                                    sx={{
+                                                        color: theme.palette.text.primary,
+                                                        fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem',
+                                                    }}
+                                                >
+                                                    Expenses by Category
+                                                </Typography>
+                                                <FormControl size="small" sx={{ minWidth: (isMobile || isTablet) ? '100%' : 150 }}>
+                                                    <Select
+                                                        value={selectedMonthForChart}
+                                                        onChange={(e) => setSelectedMonthForChart(e.target.value)}
+                                                        sx={{
+                                                            color: theme.palette.text.primary,
+                                                            fontSize: isMobile ? '0.875rem' : isTablet ? '0.9rem' : '1rem',
+                                                            '& .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.secondary.main,
+                                                            },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                                                                borderColor: theme.palette.primary.main,
+                                                            },
+                                                        }}
+                                                        MenuProps={{
+                                                            disableScrollLock: true,
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.palette.background.paper,
+                                                                    color: theme.palette.text.primary,
+                                                                },
+                                                            },
+                                                        }}
+                                                    >
+                                                        <MenuItem value="all">All Months</MenuItem>
+                                                        {MONTHS.map((month) => (
+                                                            <MenuItem key={month} value={month}>
+                                                                {month}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Box>
+                                            <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, mb: 2 }}>
+                                                {selectedMonthForChart === 'all'
+                                                    ? 'Full year per category. Sorted by amount (highest first), then category name.'
+                                                    : `${selectedMonthForChart} only. Sorted by amount (highest first), then category name.`}
                                             </Typography>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                                                 {insights.categoryBreakdown.map((item, index) => {
-                                                    const percentage = (item.amount / insights.totalExpense) * 100;
+                                                    const denom = insights.totalExpenseForCategoryScope || 0;
+                                                    const percentage = denom > 0 ? (item.amount / denom) * 100 : 0;
                                                     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50'];
                                                     return (
                                                         <Box key={item.category}>
