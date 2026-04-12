@@ -3160,6 +3160,7 @@ export default function Budget() {
                                                                                         borderColor: theme.palette.secondary.main,
                                                                                     },
                                                                                 }}
+                                                                                MenuProps={{ disableScrollLock: true }}
                                                                             >
                                                                                 {FUN_EXPENSE_CATEGORIES.map((c) => (
                                                                                     <MenuItem key={c} value={c}>{c}</MenuItem>
@@ -3466,6 +3467,7 @@ export default function Budget() {
                                                     borderColor: theme.palette.primary.main,
                                                 },
                                             }}
+                                            MenuProps={{ disableScrollLock: true }}
                                         >
                                             <MenuItem value="">
                                                 <em>Default ({FUN_EXPENSE_DEFAULT_CATEGORY})</em>
@@ -3868,6 +3870,7 @@ export default function Budget() {
                                         label="Fun expense category"
                                         value={receiptCategory}
                                         onChange={(e) => setReceiptCategory(e.target.value)}
+                                        MenuProps={{ disableScrollLock: true }}
                                     >
                                         <MenuItem value="">
                                             <em>Default ({FUN_EXPENSE_DEFAULT_CATEGORY})</em>
