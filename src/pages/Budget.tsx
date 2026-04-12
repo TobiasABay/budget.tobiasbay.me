@@ -218,7 +218,8 @@ function getFunExpenseDisplayCategory(item: LineItem): string {
 }
 
 /** Payload shape for PUT /budgets/:year/data (shared so save reads ref once, right before fetch). */
-/** If the API ever returns duplicate `id`s (e.g. legacy data), keep first row and assign new ids to the rest so delete/edit target one row only. */
+/** If the API ever returns duplicate `id`s (e.g. legacy data), keep first row and assign new ids to the rest so delete/edit target one row only.
+ * Also used before PUT: duplicate ids would make the second INSERT fail after DELETE, wiping most rows from the DB. */
 function dedupeLineItemIdsForLoad(items: LineItem[]): LineItem[] {
     const seen = new Set<string>();
     const out: LineItem[] = [];
@@ -580,7 +581,12 @@ export default function Budget() {
                     // Read ref immediately before building the body so this PUT matches the latest commit
                     // (avoids a slow request finishing with an older snapshot after add + rename).
                     const snapshot = lineItemsRef.current;
-                    const normalizedItems = normalizeLineItemsForSave(snapshot);
+                    const dedupedSnapshot = dedupeLineItemIdsForLoad(snapshot);
+                    const idsChanged = dedupedSnapshot.some((item, i) => item.id !== snapshot[i]?.id);
+                    if (idsChanged) {
+                        setLineItems(dedupedSnapshot);
+                    }
+                    const normalizedItems = normalizeLineItemsForSave(dedupedSnapshot);
 
                     const encodedYear = encodeURIComponent(year);
                     const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
@@ -882,14 +888,13 @@ export default function Budget() {
             );
             const staticExpenses = prev.filter((item) => item.type === 'expense' && item.isStaticExpense);
             const loanItems = prev.filter((item) => item.type === 'expense' && item.isLoan);
-            const base = Date.now();
-            const newItems: LineItem[] = selected.map((l, i) => {
+            const newItems: LineItem[] = selected.map((l) => {
                 const d = new Date(`${date}T12:00:00`);
                 const monthName = MONTHS[d.getMonth()];
                 const merchant = receiptMerchant.trim();
                 const displayName = merchant ? `${merchant} — ${l.name}` : l.name;
                 return {
-                    id: `${base}-${i}`,
+                    id: newLineItemId(),
                     name: displayName.slice(0, 200),
                     type: 'expense',
                     amount: 0,
