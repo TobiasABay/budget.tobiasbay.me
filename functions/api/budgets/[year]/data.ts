@@ -24,6 +24,7 @@ interface BudgetItem {
   isStaticExpense?: boolean;
   staticExpenseDate?: string;
   staticExpensePrice?: number;
+  category?: string | null;
 }
 
 // CORS headers
@@ -293,190 +294,69 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         });
       }
 
-      // Debug: Log all items to see what we're receiving
-      console.log('Received items to save:', JSON.stringify(body.items, null, 2));
-      
-      // Debug: Check categories specifically
-      const expenseItems = body.items.filter((item: BudgetItem) => item.type === 'expense');
-      console.log('🔍 Backend Debug: Expense items with categories:', expenseItems.map((item: BudgetItem) => ({
-        name: item.name,
-        category: item.category,
-        hasCategory: 'category' in item,
-        categoryType: typeof item.category
-      })));
+      // D1 batch() runs in a single implicit transaction. If any statement fails, the whole batch
+      // (including DELETE) is rolled back — avoids the previous bug where DELETE committed then a
+      // later INSERT failed, leaving a partial row set in the DB.
+      const maxItemsPerBatch = 999;
+      if (body.items.length > maxItemsPerBatch) {
+        return new Response(
+          JSON.stringify({ error: `Too many line items (max ${maxItemsPerBatch} per save)` }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
 
-      // Delete existing items
-      await env.budget_db
-        .prepare('DELETE FROM budget_items WHERE user_id = ? AND year = ?')
-        .bind(userId, year)
-        .run();
+      const statements = [
+        env.budget_db.prepare('DELETE FROM budget_items WHERE user_id = ? AND year = ?').bind(userId, year),
+      ];
 
-      // Insert new items
       for (const item of body.items) {
-        // Prepare loan data as JSON if it's a loan
-        const loanData = item.isLoan ? JSON.stringify({
-          isLoan: item.isLoan,
-          loanTitle: item.loanTitle || null,
-          loanStartDate: item.loanStartDate || null,
-          loanValue: item.loanValue || null,
-        }) : null;
+        const loanData = item.isLoan
+          ? JSON.stringify({
+              isLoan: item.isLoan,
+              loanTitle: item.loanTitle || null,
+              loanStartDate: item.loanStartDate || null,
+              loanValue: item.loanValue || null,
+            })
+          : null;
 
-        // Prepare static expense data as JSON if it's a static expense
-        const staticExpenseData = item.isStaticExpense ? JSON.stringify({
-          isStaticExpense: item.isStaticExpense,
-          staticExpenseDate: item.staticExpenseDate || null,
-          staticExpensePrice: item.staticExpensePrice || null,
-        }) : null;
+        const staticExpenseData = item.isStaticExpense
+          ? JSON.stringify({
+              isStaticExpense: item.isStaticExpense,
+              staticExpenseDate: item.staticExpenseDate || null,
+              staticExpensePrice: item.staticExpensePrice || null,
+            })
+          : null;
 
-        // Ensure months is a valid object (handle cases where it might be undefined)
         const monthsData = item.months || {};
         const monthsJson = JSON.stringify(monthsData);
+        const itemId = item.id != null && String(item.id).trim() !== '' ? String(item.id) : '';
 
-        // Always try to insert with loan_data, static_expense_data, linked_loan_id, and category (columns may exist)
-        try {
-          await env.budget_db
-            .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        statements.push(
+          env.budget_db
+            .prepare(
+              'INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data, linked_loan_id, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )
             .bind(
               budgetId,
               userId,
               year,
-              item.id,
-              item.name,
+              itemId,
+              item.name ?? '',
               item.type,
-              item.frequency,
+              item.frequency ?? 'Monthly',
               monthsJson,
               loanData,
               staticExpenseData,
               item.linkedLoanId || null,
-              item.category || null
+              item.category ?? null
             )
-            .run();
-        } catch (e: any) {
-          // If linked_loan_id column doesn't exist, try without it
-          const errorMsg = e?.message || String(e);
-          if (errorMsg.includes('no such column: linked_loan_id')) {
-            try {
-              await env.budget_db
-                .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data, static_expense_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(
-                  budgetId,
-                  userId,
-                  year,
-                  item.id,
-                  item.name,
-                  item.type,
-                  item.frequency,
-                  monthsJson,
-                  loanData,
-                  staticExpenseData
-                )
-                .run();
-            } catch (e2: any) {
-              // If static_expense_data column doesn't exist, try with just loan_data
-              const errorMsg2 = e2?.message || String(e2);
-              if (errorMsg2.includes('no such column: static_expense_data')) {
-                try {
-                  await env.budget_db
-                    .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                    .bind(
-                      budgetId,
-                      userId,
-                      year,
-                      item.id,
-                      item.name,
-                      item.type,
-                      item.frequency,
-                      monthsJson,
-                      loanData
-                    )
-                    .run();
-                } catch (e3: any) {
-                  // If loan_data also doesn't exist, fall back to insert without it
-                  const errorMsg3 = e3?.message || String(e3);
-                  if (errorMsg3.includes('no such column: loan_data')) {
-                    console.warn(`Item "${item.name}" cannot be saved with loan/static expense data. Columns don't exist.`);
-                    await env.budget_db
-                      .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                      .bind(
-                        budgetId,
-                        userId,
-                        year,
-                        item.id,
-                        item.name,
-                        item.type,
-                        item.frequency,
-                        monthsJson
-                      )
-                      .run();
-                  } else {
-                    console.error('Error inserting item:', e3, 'Item:', item);
-                    throw e3;
-                  }
-                }
-              } else {
-                console.error('Error inserting item:', e2, 'Item:', item);
-                throw e2;
-              }
-            }
-          } else if (errorMsg.includes('no such column: static_expense_data')) {
-            try {
-              await env.budget_db
-                .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months, loan_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-                .bind(
-                  budgetId,
-                  userId,
-                  year,
-                  item.id,
-                  item.name,
-                  item.type,
-                  item.frequency,
-                  monthsJson,
-                  loanData
-                )
-                .run();
-            } catch (e2: any) {
-              const errorMsg2 = e2?.message || String(e2);
-              if (errorMsg2.includes('no such column: loan_data')) {
-                console.warn(`Loan item "${item.name}" cannot be saved with loan data. Column doesn't exist.`);
-                await env.budget_db
-                  .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                  .bind(
-                    budgetId,
-                    userId,
-                    year,
-                    item.id,
-                    item.name,
-                    item.type,
-                    item.frequency,
-                    monthsJson
-                  )
-                  .run();
-              } else {
-                console.error('Error inserting item:', e2, 'Item:', item);
-                throw e2;
-              }
-            }
-          } else if (errorMsg.includes('no such column: loan_data')) {
-            console.warn(`Loan item "${item.name}" cannot be saved with loan data. Column doesn't exist.`);
-            await env.budget_db
-              .prepare('INSERT INTO budget_items (budget_id, user_id, year, item_id, name, type, frequency, months) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-              .bind(
-                budgetId,
-                userId,
-                year,
-                item.id,
-                item.name,
-                item.type,
-                item.frequency,
-                monthsJson
-              )
-              .run();
-          } else {
-            console.error('Error inserting item:', e, 'Item:', item);
-            throw e;
-          }
-        }
+        );
       }
+
+      await env.budget_db.batch(statements);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

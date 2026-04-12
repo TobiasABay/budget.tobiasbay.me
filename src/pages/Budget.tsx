@@ -2,7 +2,7 @@ import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
 import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -219,17 +219,18 @@ function getFunExpenseDisplayCategory(item: LineItem): string {
 
 /** Payload shape for PUT /budgets/:year/data (shared so save reads ref once, right before fetch). */
 /** If the API ever returns duplicate `id`s (e.g. legacy data), keep first row and assign new ids to the rest so delete/edit target one row only.
- * Also used before PUT: duplicate ids would make the second INSERT fail after DELETE, wiping most rows from the DB. */
+ * Also used before PUT: duplicate ids would make the second INSERT fail after DELETE, wiping most rows from the DB.
+ * Missing/blank ids are replaced so the DB never gets duplicate empty `item_id` values. */
 function dedupeLineItemIdsForLoad(items: LineItem[]): LineItem[] {
     const seen = new Set<string>();
     const out: LineItem[] = [];
     for (const item of items) {
-        if (!seen.has(item.id)) {
-            seen.add(item.id);
-            out.push(item);
-        } else {
-            out.push({ ...item, id: newLineItemId() });
+        let id = typeof item.id === 'string' && item.id.trim() !== '' ? item.id : newLineItemId();
+        if (seen.has(id)) {
+            id = newLineItemId();
         }
+        seen.add(id);
+        out.push({ ...item, id });
     }
     return out;
 }
@@ -446,13 +447,6 @@ export default function Budget() {
         }
     }, [isLoaded, user?.id]);
 
-    // Load budget data on mount
-    useEffect(() => {
-        if (isLoaded && user?.id && year) {
-            loadBudgetData();
-        }
-    }, [isLoaded, user?.id, year]);
-
     // Listen for currency changes in localStorage
     useEffect(() => {
         const handleStorageChange = (e: StorageEvent) => {
@@ -515,58 +509,77 @@ export default function Budget() {
         }
     };
 
-    const loadBudgetData = async () => {
-        if (!user?.id || !year) return;
+    const loadBudgetData = useCallback(
+        async (signal?: AbortSignal) => {
+            if (!user?.id || !year) return;
 
-        setLoading(true);
-        setBudgetDataLoaded(false);
-        try {
-            const encodedYear = encodeURIComponent(year);
-            const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-User-Id': user.id,
-                },
-            });
-
-            if (response.ok) {
-                const items = await response.json();
-                // Ensure items with static expense properties are marked as static expenses
-                // This is a safeguard in case the API didn't set the flag
-                // Also extract formulas from months._formulas if they exist
-                const normalizedItems = items.map((item: LineItem) => {
-                    const normalizedItem = { ...item };
-
-                    // Extract formulas from months._formulas if they exist
-                    if ((item.months as any)?._formulas) {
-                        normalizedItem.formulas = (item.months as any)._formulas;
-                        // Remove _formulas from months to keep it clean
-                        const { _formulas, ...cleanMonths } = item.months as any;
-                        normalizedItem.months = cleanMonths;
-                    }
-
-                    if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
-                        normalizedItem.isStaticExpense = true;
-                    }
-                    if (normalizedItem.isStaticExpense && normalizedItem.type === 'expense') {
-                        const cc = normalizedItem.category && String(normalizedItem.category).trim();
-                        normalizedItem.category =
-                            cc && (FUN_EXPENSE_CATEGORIES as readonly string[]).includes(cc)
-                                ? cc
-                                : FUN_EXPENSE_DEFAULT_CATEGORY;
-                    }
-                    return normalizedItem;
+            setLoading(true);
+            setBudgetDataLoaded(false);
+            try {
+                const encodedYear = encodeURIComponent(year);
+                const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': user.id,
+                    },
+                    signal,
                 });
-                setLineItems(dedupeLineItemIdsForLoad(normalizedItems));
-                setBudgetDataLoaded(true);
+
+                if (signal?.aborted) return;
+
+                if (response.ok) {
+                    const items = await response.json();
+                    if (signal?.aborted) return;
+                    // Ensure items with static expense properties are marked as static expenses
+                    // This is a safeguard in case the API didn't set the flag
+                    // Also extract formulas from months._formulas if they exist
+                    const normalizedItems = items.map((item: LineItem) => {
+                        const normalizedItem = { ...item };
+
+                        // Extract formulas from months._formulas if they exist
+                        if ((item.months as any)?._formulas) {
+                            normalizedItem.formulas = (item.months as any)._formulas;
+                            // Remove _formulas from months to keep it clean
+                            const { _formulas, ...cleanMonths } = item.months as any;
+                            normalizedItem.months = cleanMonths;
+                        }
+
+                        if ((item.staticExpenseDate || item.staticExpensePrice) && !item.isStaticExpense) {
+                            normalizedItem.isStaticExpense = true;
+                        }
+                        if (normalizedItem.isStaticExpense && normalizedItem.type === 'expense') {
+                            const cc = normalizedItem.category && String(normalizedItem.category).trim();
+                            normalizedItem.category =
+                                cc && (FUN_EXPENSE_CATEGORIES as readonly string[]).includes(cc)
+                                    ? cc
+                                    : FUN_EXPENSE_DEFAULT_CATEGORY;
+                        }
+                        return normalizedItem;
+                    });
+                    setLineItems(dedupeLineItemIdsForLoad(normalizedItems));
+                    setBudgetDataLoaded(true);
+                }
+            } catch (error) {
+                if (signal?.aborted) return;
+                console.error('Error loading budget data:', error);
+            } finally {
+                if (!signal?.aborted) {
+                    setLoading(false);
+                }
             }
-        } catch (error) {
-            console.error('Error loading budget data:', error);
-        } finally {
-            setLoading(false);
+        },
+        [user?.id, year]
+    );
+
+    // Load budget data on mount / year change; abort stale in-flight GETs (React Strict Mode, fast remounts).
+    useEffect(() => {
+        if (isLoaded && user?.id && year) {
+            const ac = new AbortController();
+            loadBudgetData(ac.signal);
+            return () => ac.abort();
         }
-    };
+    }, [isLoaded, user?.id, year, loadBudgetData]);
 
     const queueSaveBudgetData = () => {
         if (!user?.id || !year) return;
