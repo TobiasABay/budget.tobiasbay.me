@@ -1123,9 +1123,12 @@ export default function Budget() {
         const totalExpense = monthlyData.reduce((sum, m) => sum + m.expense, 0);
         const totalSavings = totalIncome - totalExpense;
         const totalNordnetSavings = monthlyData.reduce((sum, m) => sum + m.nordnetSavings, 0);
-        const averageMonthlySavings = totalSavings / MONTHS.length;
-        const averageMonthlyIncome = totalIncome / MONTHS.length;
-        const averageMonthlyExpense = totalExpense / MONTHS.length;
+        // Only count months that actually have registered data so averages reflect real activity.
+        const activeMonthsCount = monthlyData.filter((m) => m.income !== 0 || m.expense !== 0).length;
+        const averageDivisor = activeMonthsCount || 1;
+        const averageMonthlySavings = totalSavings / averageDivisor;
+        const averageMonthlyIncome = totalIncome / averageDivisor;
+        const averageMonthlyExpense = totalExpense / averageDivisor;
 
         // Find best and worst months
         const bestMonth = monthlyData.reduce((best, current) =>
