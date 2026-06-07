@@ -4127,8 +4127,10 @@ export default function Budget() {
                                             )}
                                         </Box>
                                         {(() => {
-                                            const expenses = Math.max(insights.totalExpense, 0);
                                             const funExpenses = Math.max(insights.totalFunExpenses, 0);
+                                            // Fun expenses live in the monthly grid too, so pull them out of totalExpense
+                                            // instead of subtracting them again from savings.
+                                            const expenses = Math.max(insights.totalExpense - funExpenses, 0);
                                             const savings = Math.max(insights.totalSavings, 0);
                                             const total = expenses + funExpenses + savings;
                                             if (total <= 0) return null;
