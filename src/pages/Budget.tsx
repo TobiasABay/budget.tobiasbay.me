@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer, Tooltip } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -22,6 +22,7 @@ import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 
@@ -4122,30 +4123,81 @@ export default function Budget() {
                                                 </Box>
                                             )}
                                         </Box>
+                                        {(() => {
+                                            const expenses = Math.max(insights.totalExpense, 0);
+                                            const funExpenses = Math.max(insights.totalFunExpenses, 0);
+                                            const savings = Math.max(insights.totalSavings, 0);
+                                            const total = expenses + funExpenses + savings;
+                                            if (total <= 0) return null;
+                                            const segments = [
+                                                { label: 'Expenses', value: expenses, color: '#f44336' },
+                                                { label: 'Fun expenses', value: funExpenses, color: '#ff9800' },
+                                                { label: 'Savings', value: savings, color: '#4caf50' },
+                                            ].filter((s) => s.value > 0);
+                                            return (
+                                                <Box sx={{ mt: 2 }}>
+                                                    <Box sx={{ display: 'flex', height: 16, borderRadius: 1, overflow: 'hidden', bgcolor: theme.palette.background.paper }}>
+                                                        {segments.map((s) => (
+                                                            <Box
+                                                                key={s.label}
+                                                                title={`${s.label}: ${formatBudgetPercent((s.value / total) * 100)}%`}
+                                                                sx={{ width: `${(s.value / total) * 100}%`, bgcolor: s.color }}
+                                                            />
+                                                        ))}
+                                                    </Box>
+                                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1 }}>
+                                                        {segments.map((s) => (
+                                                            <Box key={s.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                                <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: s.color }} />
+                                                                <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary }}>
+                                                                    {s.label}
+                                                                    {!hideBudgetNumbers && ` · ${formatBudgetPercent((s.value / total) * 100)}%`}
+                                                                </Typography>
+                                                            </Box>
+                                                        ))}
+                                                    </Box>
+                                                </Box>
+                                            );
+                                        })()}
                                     </Paper>
 
                                     {/* Summary Cards */}
                                     <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                Total Income
-                                            </Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                    Total Income
+                                                </Typography>
+                                                <Tooltip title="The sum of all income line items across every month of the year." arrow>
+                                                    <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Box>
                                             <Typography sx={{ color: '#4caf50', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
                                                 {formatBudgetAmount(insights.totalIncome)}
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                Total Expenses
-                                            </Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                    Total Expenses
+                                                </Typography>
+                                                <Tooltip title="The sum of all expense line items across every month (Nordnet/stock savings excluded, since those count as savings)." arrow>
+                                                    <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Box>
                                             <Typography sx={{ color: '#f44336', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
                                                 {formatBudgetAmount(insights.totalExpense)}
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                Total Savings
-                                            </Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                    Total Savings
+                                                </Typography>
+                                                <Tooltip title="The absolute amount left over: Total Income minus Total Expenses." arrow>
+                                                    <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Box>
                                             <Typography sx={{
                                                 color: insights.totalSavings >= 0 ? '#4caf50' : '#f44336',
                                                 fontSize: '1.5rem',
@@ -4156,9 +4208,14 @@ export default function Budget() {
                                             </Typography>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                Savings Rate
-                                            </Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
+                                                    Savings Rate
+                                                </Typography>
+                                                <Tooltip title="The share of income you keep: Total Savings divided by Total Income, shown as a percentage." arrow>
+                                                    <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
+                                                </Tooltip>
+                                            </Box>
                                             <Typography sx={{
                                                 color: insights.savingsRate >= 0 ? '#4caf50' : '#f44336',
                                                 fontSize: '1.5rem',
