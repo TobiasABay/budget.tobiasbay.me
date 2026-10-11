@@ -1,6 +1,6 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer, Tooltip } from "@mui/material";
+import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Select, MenuItem, FormControl, InputLabel, Menu, useMediaQuery, useTheme, Accordion, AccordionSummary, AccordionDetails, Chip, LinearProgress, Collapse, Checkbox, TableContainer, Tooltip, Alert } from "@mui/material";
 import { useParams } from "react-router-dom";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
@@ -23,8 +23,30 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import CategoryIcon from '@mui/icons-material/Category';
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
+import {
+    formatReportingPeriodLabel,
+    isIncompleteCurrentMonth,
+    isInvestmentTransferItem,
+    monthCashSavings,
+    monthEconomicSavings,
+    monthLivingExpenses,
+    monthNetTotalExpense,
+    monthNordnetNet,
+    nordnetWithdrawalCash,
+    summarizeBudgetYear,
+} from "../utils/budgetMath";
+import { EXPENSE_CATEGORIES as SHARED_EXPENSE_CATEGORIES } from "../utils/budgetCategories";
+import {
+    extractCategoryBudgetsFromItems,
+    withCategoryBudgetsMetaItem,
+    type CategoryMonthlyBudgets,
+} from "../utils/categoryBudgets";
+import BankReconcileDialog from "../components/BankReconcileDialog";
+import CategoryBudgetCompareDialog from "../components/CategoryBudgetCompareDialog";
 
 // Default: relative `/api` (Vite dev proxies to production; deployed app hits same host).
 // Set VITE_API_URL to override (e.g. local wrangler).
@@ -58,19 +80,7 @@ function staticExpenseMonthBucket(staticExpenseDate: string | undefined): string
     return MONTHS[d.getMonth()];
 }
 
-const EXPENSE_CATEGORIES = [
-    'Housing',
-    'Insurance',
-    'Food',
-    'Transportation',
-    'Utilities',
-    'Healthcare',
-    'Fitness',
-    'Entertainment',
-    'Shopping',
-    'Education',
-    'Other'
-] as const;
+const EXPENSE_CATEGORIES = SHARED_EXPENSE_CATEGORIES;
 
 /** Categories for fun (one-off) expenses. If none is chosen, `FUN_EXPENSE_DEFAULT_CATEGORY` is stored. */
 const FUN_EXPENSE_CATEGORIES = [
@@ -297,10 +307,16 @@ export default function Budget() {
     const isTablet = useMediaQuery(muiTheme.breakpoints.down('md'));
     const isDesktop = useMediaQuery(muiTheme.breakpoints.up('lg'));
 
-    // Helper function to check if an item is Nordnet
-    const isNordnetItem = (item: LineItem): boolean => {
-        return item.type === 'expense' && item.name.toLowerCase().trim().includes('nordnet');
-    };
+    const isNordnetItem = (item: LineItem) => isInvestmentTransferItem(item);
+    const getNordnetNetForMonth = (month: string, items: LineItem[] = lineItems) =>
+        monthNordnetNet(items, month);
+    const getLivingExpensesForMonth = (month: string, items: LineItem[] = lineItems) =>
+        monthLivingExpenses(items, month);
+    const getNetTotalExpenseForMonth = (month: string, items: LineItem[] = lineItems) =>
+        monthNetTotalExpense(items, month);
+    const getMonthCashSavings = monthCashSavings;
+    const getMonthEconomicSavings = monthEconomicSavings;
+
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedType, setSelectedType] = useState<'income' | 'expense' | 'loan' | 'staticExpense' | null>(null);
     const [itemName, setItemName] = useState('');
@@ -317,6 +333,9 @@ export default function Budget() {
     const [expenseCategory, setExpenseCategory] = useState<string>('');
     const [loans, setLoans] = useState<Loan[]>([]);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
+    /** Planned category amounts (stored as a meta row in /data; kept out of the grid). */
+    const [categoryBudgets, setCategoryBudgets] = useState<CategoryMonthlyBudgets>({});
+    const categoryBudgetsRef = useRef<CategoryMonthlyBudgets>({});
     /** After a successful GET for this year; blocks PUT until then so we never overwrite the DB with [] before load. */
     const [budgetDataLoaded, setBudgetDataLoaded] = useState(false);
     const [editingCell, setEditingCell] = useState<{ itemId: string; month: string } | null>(null);
@@ -339,7 +358,12 @@ export default function Budget() {
     const [funExpenseDeleteId, setFunExpenseDeleteId] = useState<string | null>(null);
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [insightsModalOpen, setInsightsModalOpen] = useState(false);
+    const [reconcileModalOpen, setReconcileModalOpen] = useState(false);
+    const [categoryCompareOpen, setCategoryCompareOpen] = useState(false);
     const [selectedMonthForChart, setSelectedMonthForChart] = useState<string>('all');
+    const [insightsDrillCategory, setInsightsDrillCategory] = useState<string | null>(null);
+    const [insightsDrillSource, setInsightsDrillSource] = useState<'expense' | 'fun' | null>(null);
+    const [funExpenseSortBy, setFunExpenseSortBy] = useState<'date' | 'amount' | 'category'>('date');
     const [editExpenseModalOpen, setEditExpenseModalOpen] = useState(false);
     const [editingExpenseItem, setEditingExpenseItem] = useState<LineItem | null>(null);
     const [editExpenseName, setEditExpenseName] = useState<string>('');
@@ -369,6 +393,12 @@ export default function Budget() {
         if (hideBudgetNumbers) return '•••';
         return value.toFixed(fractionDigits);
     };
+
+    /** Instant YTD overview — same formulas as the grid / Insights. */
+    const yearOverview = useMemo(
+        () => summarizeBudgetYear(lineItems, { budgetYear: year }),
+        [lineItems, year]
+    );
 
     const handleOpenEditExpenseModal = (item: LineItem) => {
         setEditingExpenseItem(item);
@@ -478,6 +508,51 @@ export default function Budget() {
         saveGenerationRef.current += 1;
     }, [lineItems]);
 
+    useLayoutEffect(() => {
+        categoryBudgetsRef.current = categoryBudgets;
+    }, [categoryBudgets]);
+
+    // Keep planned category amounts in sync when Settings saves (or tab regains focus).
+    useEffect(() => {
+        const applyBudgets = (next: CategoryMonthlyBudgets) => {
+            setCategoryBudgets(next);
+            categoryBudgetsRef.current = next;
+        };
+
+        const onUpdated = (event: Event) => {
+            const detail = (event as CustomEvent).detail as
+                | { year?: string; categoryBudgets?: CategoryMonthlyBudgets }
+                | undefined;
+            if (!detail || detail.year !== year || !detail.categoryBudgets) return;
+            applyBudgets(detail.categoryBudgets);
+        };
+
+        const refreshFromServer = async () => {
+            if (!user?.id || !year || !budgetDataLoaded) return;
+            try {
+                const res = await fetch(`${API_BASE_URL}/budgets/${encodeURIComponent(year)}/data`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': user.id,
+                    },
+                });
+                if (!res.ok) return;
+                const raw = await res.json();
+                const { categoryBudgets: next } = extractCategoryBudgetsFromItems(raw);
+                applyBudgets(next);
+            } catch {
+                // ignore refresh errors
+            }
+        };
+
+        window.addEventListener('categoryBudgetsUpdated', onUpdated);
+        window.addEventListener('focus', refreshFromServer);
+        return () => {
+            window.removeEventListener('categoryBudgetsUpdated', onUpdated);
+            window.removeEventListener('focus', refreshFromServer);
+        };
+    }, [user?.id, year, budgetDataLoaded]);
+
     // Save budget data whenever lineItems change (only after server data has been loaded once)
     useEffect(() => {
         if (isLoaded && user?.id && year && budgetDataLoaded && !loading) {
@@ -530,12 +605,14 @@ export default function Budget() {
                 if (signal?.aborted) return;
 
                 if (response.ok) {
-                    const items = await response.json();
+                    const rawItems = await response.json();
                     if (signal?.aborted) return;
+                    const { items, categoryBudgets: loadedCategoryBudgets } =
+                        extractCategoryBudgetsFromItems(rawItems);
                     // Ensure items with static expense properties are marked as static expenses
                     // This is a safeguard in case the API didn't set the flag
                     // Also extract formulas from months._formulas if they exist
-                    const normalizedItems = items.map((item: LineItem) => {
+                    const normalizedItems = (items as LineItem[]).map((item) => {
                         const normalizedItem = { ...item };
 
                         // Extract formulas from months._formulas if they exist
@@ -558,7 +635,9 @@ export default function Budget() {
                         }
                         return normalizedItem;
                     });
-                    setLineItems(dedupeLineItemIdsForLoad(normalizedItems));
+                    setCategoryBudgets(loadedCategoryBudgets);
+                    categoryBudgetsRef.current = loadedCategoryBudgets;
+                    setLineItems(dedupeLineItemIdsForLoad(normalizedItems as LineItem[]));
                     setBudgetDataLoaded(true);
                 }
             } catch (error) {
@@ -601,6 +680,11 @@ export default function Budget() {
                         setLineItems(dedupedSnapshot);
                     }
                     const normalizedItems = normalizeLineItemsForSave(dedupedSnapshot);
+                    // Preserve category budgets meta row (edited in Settings) on every autosave.
+                    const itemsWithCategoryBudgets = withCategoryBudgetsMetaItem(
+                        normalizedItems,
+                        categoryBudgetsRef.current
+                    );
 
                     const encodedYear = encodeURIComponent(year);
                     const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
@@ -609,7 +693,7 @@ export default function Budget() {
                             'Content-Type': 'application/json',
                             'X-User-Id': user.id,
                         },
-                        body: JSON.stringify({ items: normalizedItems }),
+                        body: JSON.stringify({ items: itemsWithCategoryBudgets }),
                     });
 
                     if (!response.ok) {
@@ -1080,17 +1164,17 @@ export default function Budget() {
         setDragOverItemId(null);
     };
 
-    /** Same rules as Total Income / Total Expense / Savings rows (Nordnet excluded from expenses). */
+    /** Same rules as Total Income / Total Expense / Savings rows. */
     const collapsedTableMonthSummaries = useMemo(
         () =>
             MONTHS.map((month) => {
                 const totalIncome = lineItems
                     .filter((item) => item.type === 'income')
                     .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                const totalExpense = lineItems
-                    .filter((item) => item.type === 'expense' && !isNordnetItem(item))
-                    .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                const netto = totalIncome - totalExpense;
+                const living = getLivingExpensesForMonth(month);
+                const totalExpense = getNetTotalExpenseForMonth(month);
+                const nordnetNet = getNordnetNetForMonth(month);
+                const netto = getMonthCashSavings(totalIncome, living, nordnetNet);
                 return { month, totalIncome, totalExpense, netto };
             }),
         [lineItems]
@@ -1102,42 +1186,69 @@ export default function Budget() {
             const totalIncome = lineItems
                 .filter(item => item.type === 'income')
                 .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-            const totalExpense = lineItems
-                .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-            const savings = totalIncome - totalExpense;
-            const nordnetSavings = lineItems
-                .filter(item => isNordnetItem(item))
-                .reduce((sum, item) => sum + Math.abs(item.months[month] || 0), 0);
+            const living = getLivingExpensesForMonth(month);
+            const totalExpense = getNetTotalExpenseForMonth(month);
+            const nordnetNet = getNordnetNetForMonth(month);
+            const savings = getMonthCashSavings(totalIncome, living, nordnetNet);
+            const economicSavings = getMonthEconomicSavings(totalIncome, living);
 
             return {
                 month,
                 income: totalIncome,
                 expense: totalExpense,
+                living,
                 savings,
-                nordnetSavings
+                economicSavings,
+                nordnetSavings: nordnetNet,
             };
         });
 
-        const totalIncome = monthlyData.reduce((sum, m) => sum + m.income, 0);
-        const totalExpense = monthlyData.reduce((sum, m) => sum + m.expense, 0);
-        const totalSavings = totalIncome - totalExpense;
-        const totalNordnetSavings = monthlyData.reduce((sum, m) => sum + m.nordnetSavings, 0);
-        // Only count months that actually have registered data so averages reflect real activity.
-        const activeMonthsCount = monthlyData.filter((m) => m.income !== 0 || m.expense !== 0).length;
-        const averageDivisor = activeMonthsCount || 1;
-        const averageMonthlySavings = totalSavings / averageDivisor;
-        const averageMonthlyIncome = totalIncome / averageDivisor;
-        const averageMonthlyExpense = totalExpense / averageDivisor;
+        const yearRollup = summarizeBudgetYear(lineItems, { budgetYear: year });
+        const periodMeta = formatReportingPeriodLabel(year);
+        const totalIncome = yearRollup.totalIncome;
+        const totalExpense = yearRollup.totalNetExpense;
+        const totalLivingExpense = yearRollup.totalLiving;
+        const totalSavings = yearRollup.totalCashSavings;
+        const totalEconomicSavings = yearRollup.totalEconomicSavings;
+        const totalNordnetSavings = yearRollup.totalNordnet;
+        const totalWithdrawals = yearRollup.totalWithdrawals;
+        const cashSavingsRate = yearRollup.cashSavingsRate;
+        // Averages exclude the incomplete current calendar month (still in YTD totals).
+        const averageMonthlySavings = yearRollup.averageMonthlyCashSavings;
+        const averageMonthlyIncome = yearRollup.averageMonthlyIncome;
+        const averageMonthlyExpense = yearRollup.averageMonthlyNetExpense;
+        const averageMonthsUsed = yearRollup.averageMonths.length;
 
-        // Find best and worst months
-        const bestMonth = monthlyData.reduce((best, current) =>
-            current.savings > best.savings ? current : best, monthlyData[0] || { month: '', savings: 0 });
-        const worstMonth = monthlyData.reduce((worst, current) =>
-            current.savings < worst.savings ? current : worst, monthlyData[0] || { month: '', savings: 0 });
+        // Best/worst among complete months with activity only
+        const activeForBestWorst = monthlyData.filter((m, idx) => {
+            const hasActivity = m.income !== 0 || m.living !== 0 || m.nordnetSavings !== 0;
+            return hasActivity && !isIncompleteCurrentMonth(idx, year);
+        });
+        const bestMonth = activeForBestWorst.reduce((best, current) =>
+            current.savings > best.savings ? current : best, activeForBestWorst[0] || { month: '', savings: 0 });
+        const worstMonth = activeForBestWorst.reduce((worst, current) =>
+            current.savings < worst.savings ? current : worst, activeForBestWorst[0] || { month: '', savings: 0 });
 
-        // Calculate savings rate
-        const savingsRate = totalIncome > 0 ? (totalSavings / totalIncome) * 100 : 0;
+        const savingsRate = yearRollup.savingsRate;
+
+        // Loan-linked repayments (still inside living; shown as breakdown only)
+        const totalLoanRepayments = MONTHS.reduce((sum, month) => {
+            return (
+                sum +
+                lineItems
+                    .filter((item) => item.type === 'expense' && !!item.linkedLoanId && !isNordnetItem(item))
+                    .reduce((s, item) => s + (item.months[month] || 0), 0)
+            );
+        }, 0);
+
+        // Fun dual-storage drift: staticExpensePrice vs sum of months cells
+        const funItemsAll = lineItems.filter((item) => item.type === 'expense' && item.isStaticExpense);
+        const funFromPrices = funItemsAll.reduce((s, item) => s + (item.staticExpensePrice || 0), 0);
+        const funFromMonths = funItemsAll.reduce(
+            (s, item) => s + MONTHS.reduce((ms, m) => ms + (item.months[m] || 0), 0),
+            0
+        );
+        const funDataDrift = Math.abs(funFromPrices - funFromMonths);
 
         // Calculate fun expenses breakdown (filter by month if provided)
         const funExpenses = lineItems.filter(item => item.type === 'expense' && item.isStaticExpense);
@@ -1227,16 +1338,19 @@ export default function Budget() {
                     a.category.localeCompare(b.category, undefined, { sensitivity: 'base' })
             );
 
-        const totalExpenseForCategoryScope =
+        // Category % uses gross living expenses (before Nordnet withdrawal offset)
+        const livingExpenseAnnual = MONTHS.reduce((sum, month) => sum + getLivingExpensesForMonth(month), 0);
+        const livingExpenseForCategoryScope =
             !selectedMonth || selectedMonth === 'all'
-                ? totalExpense
-                : monthlyData.find((m) => m.month === selectedMonth)?.expense ?? 0;
+                ? livingExpenseAnnual
+                : getLivingExpensesForMonth(selectedMonth);
+        const totalExpenseForCategoryScope = livingExpenseForCategoryScope;
 
         const benchmarkSimilarityScore =
-            totalExpense > 0
+            livingExpenseAnnual > 0
                 ? Math.round(
                     cosineSimilarity01(
-                        EXPENSE_CATEGORIES.map((cat) => (annualExpensesByCategory[cat] || 0) / totalExpense),
+                        EXPENSE_CATEGORIES.map((cat) => (annualExpensesByCategory[cat] || 0) / livingExpenseAnnual),
                         EXPENSE_CATEGORIES.map((cat) => BENCHMARK_ONE_PERSON_EXPENSE_SHARES[cat])
                     ) * 100
                 )
@@ -1246,20 +1360,31 @@ export default function Budget() {
             monthlyData,
             totalIncome,
             totalExpense,
+            totalLivingExpense,
             totalSavings,
+            totalEconomicSavings,
             totalNordnetSavings,
+            totalWithdrawals,
+            totalLoanRepayments,
             averageMonthlySavings,
             averageMonthlyIncome,
             averageMonthlyExpense,
+            averageMonthsUsed,
             bestMonth,
             worstMonth,
             savingsRate,
+            cashSavingsRate,
             funExpensesByItem,
             totalFunExpenses,
             funExpenseCategoryBreakdown,
             categoryBreakdown,
             totalExpenseForCategoryScope,
-            benchmarkSimilarityScore
+            benchmarkSimilarityScore,
+            periodLabel: periodMeta.label,
+            incompleteMonth: periodMeta.incompleteMonth,
+            funDataDrift,
+            funFromPrices,
+            funFromMonths,
         };
     };
 
@@ -1273,7 +1398,7 @@ export default function Budget() {
                 overflow: 'hidden',
                 maxWidth: '100%'
             }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, marginBottom: isMobile ? '1rem' : '2rem', flexWrap: 'wrap' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, marginBottom: isMobile ? '1rem' : '1.25rem', flexWrap: 'wrap' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Typography sx={{ color: theme.palette.text.primary }} variant={isMobile ? "h5" : "h4"}>
                             Budget {year}
@@ -1295,6 +1420,42 @@ export default function Budget() {
                             title="View Insights"
                         >
                             <InsightsIcon />
+                        </IconButton>
+                        <IconButton
+                            onClick={() => setReconcileModalOpen(true)}
+                            disabled={!isLoaded || !user?.id || loading || lineItems.length === 0}
+                            sx={{
+                                color: theme.palette.warning.main,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.warning.main,
+                                    color: theme.palette.warning.contrastText,
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                },
+                            }}
+                            title="Compare bank CSV to budget"
+                        >
+                            <CompareArrowsIcon />
+                        </IconButton>
+                        <IconButton
+                            onClick={() => setCategoryCompareOpen(true)}
+                            disabled={!isLoaded || !user?.id || loading}
+                            sx={{
+                                color: theme.palette.secondary.light,
+                                bgcolor: theme.palette.background.paper,
+                                '&:hover': {
+                                    bgcolor: theme.palette.secondary.main,
+                                    color: theme.palette.secondary.contrastText,
+                                },
+                                '&:disabled': {
+                                    opacity: 0.5,
+                                },
+                            }}
+                            title="Category budget vs actual"
+                        >
+                            <CategoryIcon />
                         </IconButton>
                         <IconButton
                             onClick={handleOpenMenu}
@@ -1436,6 +1597,77 @@ export default function Budget() {
                         </MenuItem>
                     </Menu>
                 </Box>
+
+                {/* Fast YTD overview — always visible above the table */}
+                {!loading && lineItems.length > 0 && (
+                    <Box
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
+                            gap: 1.25,
+                            mb: 2,
+                        }}
+                    >
+                        {[
+                            {
+                                label: 'Income',
+                                value: formatBudgetAmount(yearOverview.totalIncome),
+                                color: '#4caf50',
+                                tip: 'Sum of all income this year',
+                            },
+                            {
+                                label: 'Expenses',
+                                value: formatBudgetAmount(yearOverview.totalNetExpense),
+                                color: '#f44336',
+                                tip: 'Living costs minus Nordnet withdrawals (Afdrag funded from Nordnet does not inflate this)',
+                            },
+                            {
+                                label: 'Cash',
+                                value: formatBudgetAmount(yearOverview.totalCashSavings),
+                                color: yearOverview.totalCashSavings >= 0 ? '#4caf50' : '#f44336',
+                                tip: 'Income − living − Nordnet transfers. What is left in cash, not in stocks.',
+                            },
+                            {
+                                label: 'Nordnet',
+                                value: formatBudgetAmount(yearOverview.totalNordnet),
+                                color: '#9c27b0',
+                                tip: 'Net transfers into Nordnet (deposits minus withdrawals)',
+                            },
+                            {
+                                label: 'Wealth',
+                                value: formatBudgetAmount(yearOverview.wealth),
+                                color: yearOverview.wealth >= 0 ? '#4caf50' : '#f44336',
+                                tip: 'Cash + Nordnet. Equals income minus living costs over the year.',
+                            },
+                            {
+                                label: 'Save rate',
+                                value: hideBudgetNumbers ? '•••' : `${formatBudgetPercent(yearOverview.savingsRate)}%`,
+                                color: yearOverview.savingsRate >= 0 ? '#4caf50' : '#f44336',
+                                tip: 'Economic rate: (income − living) ÷ income. See Insights for cash rate too.',
+                            },
+                        ].map((kpi) => (
+                            <Tooltip key={kpi.label} title={kpi.tip} arrow>
+                                <Paper
+                                    onClick={() => setInsightsModalOpen(true)}
+                                    sx={{
+                                        p: 1.25,
+                                        bgcolor: theme.palette.background.paper,
+                                        border: `1px solid ${theme.palette.secondary.main}55`,
+                                        cursor: 'pointer',
+                                        '&:hover': { borderColor: theme.palette.info.main },
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: '0.7rem', color: theme.palette.text.secondary, fontWeight: 600 }}>
+                                        {kpi.label}
+                                    </Typography>
+                                    <Typography sx={{ fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: 700, color: kpi.color, mt: 0.25, lineHeight: 1.2 }}>
+                                        {kpi.value}
+                                    </Typography>
+                                </Paper>
+                            </Tooltip>
+                        ))}
+                    </Box>
+                )}
 
                 <Collapse in={budgetTableExpanded} timeout="auto" unmountOnExit={false}>
                     <Paper sx={{
@@ -1940,13 +2172,15 @@ export default function Budget() {
                                                                 }}
                                                             />
                                                         )}
-                                                        <TrendingUpIcon
-                                                            sx={{
-                                                                fontSize: '1rem',
-                                                                color: '#9c27b0',
-                                                                opacity: 0.9
-                                                            }}
-                                                        />
+                                                        <Tooltip title="Positive = deposit into Nordnet. Negative = withdrawal to cash (not income)." arrow>
+                                                            <TrendingUpIcon
+                                                                sx={{
+                                                                    fontSize: '1rem',
+                                                                    color: '#9c27b0',
+                                                                    opacity: 0.9
+                                                                }}
+                                                            />
+                                                        </Tooltip>
                                                         <span style={{ flex: 1 }}>
                                                             {item.name}
                                                         </span>
@@ -1973,18 +2207,22 @@ export default function Budget() {
                                                 </TableCell>
                                                 {MONTHS.map((month) => {
                                                     const cellValue = item.months[month] || 0;
+                                                    const isWithdrawal = cellValue < 0;
+                                                    const nordnetColor = isWithdrawal ? '#ef6c00' : '#9c27b0';
                                                     const isEditing = editingCell?.itemId === item.id && editingCell?.month === month;
                                                     return (
                                                         <TableCell
                                                             key={month}
                                                             onClick={() => !isEditing && handleCellClick(item.id, month)}
                                                             align="center"
+                                                            title={isWithdrawal ? 'Withdrawal (cash in, not income)' : cellValue > 0 ? 'Deposit into Nordnet' : undefined}
                                                             sx={{
-                                                                color: '#9c27b0',
+                                                                color: nordnetColor,
                                                                 padding: '8px 4px',
                                                                 cursor: isEditing ? 'default' : 'pointer',
                                                                 bgcolor: theme.palette.background.paper,
                                                                 fontSize: isMobile ? '0.75rem' : '0.875rem',
+                                                                fontWeight: isWithdrawal ? 700 : 400,
                                                                 '&:hover': {
                                                                     bgcolor: isEditing ? 'transparent' : theme.palette.background.default,
                                                                 },
@@ -2005,6 +2243,7 @@ export default function Budget() {
                                                                     }}
                                                                     autoFocus
                                                                     size="small"
+                                                                    placeholder="+deposit / −withdraw"
                                                                     inputProps={{
                                                                         style: {
                                                                             textAlign: 'center',
@@ -2016,13 +2255,13 @@ export default function Budget() {
                                                                         width: '100%',
                                                                         '& .MuiOutlinedInput-root': {
                                                                             '& fieldset': {
-                                                                                borderColor: '#9c27b0',
+                                                                                borderColor: nordnetColor,
                                                                             },
                                                                             '&:hover fieldset': {
-                                                                                borderColor: '#9c27b0',
+                                                                                borderColor: nordnetColor,
                                                                             },
                                                                             '&.Mui-focused fieldset': {
-                                                                                borderColor: '#9c27b0',
+                                                                                borderColor: nordnetColor,
                                                                             },
                                                                         },
                                                                     }}
@@ -2229,18 +2468,27 @@ export default function Budget() {
                                             }),
                                         }}
                                     >
-                                        Total Expense
+                                        <Tooltip title="Living expenses minus Nordnet withdrawals. Spending funded by pulling money out of Nordnet (e.g. Afdrag) does not inflate this total. Deposits are never included." arrow>
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                Total Expense
+                                                <InfoOutlinedIcon sx={{ fontSize: '1rem', opacity: 0.8 }} />
+                                            </Box>
+                                        </Tooltip>
                                     </TableCell>
                                     {MONTHS.map((month) => {
-                                        // Total expenses excluding Nordnet (Nordnet is savings, not an expense)
-                                        const totalExpense = lineItems
-                                            .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
+                                        const living = getLivingExpensesForMonth(month);
+                                        const withdrawal = nordnetWithdrawalCash(getNordnetNetForMonth(month));
+                                        const totalExpense = living - withdrawal;
 
                                         return (
                                             <TableCell
                                                 key={month}
                                                 align="center"
+                                                title={
+                                                    withdrawal > 0
+                                                        ? `Living ${formatBudgetAmount(living)} − Nordnet withdrawal ${formatBudgetAmount(withdrawal)}`
+                                                        : undefined
+                                                }
                                                 sx={{
                                                     color: '#f44336', // Bright red for total expense values
                                                     padding: '12px 4px',
@@ -2284,19 +2532,20 @@ export default function Budget() {
                                             }),
                                         }}
                                     >
-                                        Savings
+                                        <Tooltip title="Cash change: Income − living costs − Nordnet transfers. Deposits reduce cash; withdrawals increase it (not income). Add Nordnet Savings for total wealth." arrow>
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                Savings
+                                                <InfoOutlinedIcon sx={{ fontSize: '1rem', opacity: 0.8 }} />
+                                            </Box>
+                                        </Tooltip>
                                     </TableCell>
                                     {MONTHS.map((month) => {
-                                        // Calculate income (all income items)
                                         const totalIncome = lineItems
                                             .filter(item => item.type === 'income')
                                             .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                        // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
-                                        const totalExpense = lineItems
-                                            .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                            .reduce((sum, item) => sum + (item.months[month] || 0), 0);
-                                        // Savings = Income - Expenses (Nordnet excluded)
-                                        const savings = totalIncome - totalExpense;
+                                        const living = getLivingExpensesForMonth(month);
+                                        const nordnetNet = getNordnetNetForMonth(month);
+                                        const savings = getMonthCashSavings(totalIncome, living, nordnetNet);
 
                                         return (
                                             <TableCell
@@ -2333,22 +2582,25 @@ export default function Budget() {
                                             }),
                                         }}
                                     >
-                                        Cumulative Savings
+                                        <Tooltip title="Running cash total. Cash + Nordnet Savings ≈ income minus all living costs." arrow>
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                Cumulative Savings
+                                                <InfoOutlinedIcon sx={{ fontSize: '1rem', opacity: 0.8 }} />
+                                            </Box>
+                                        </Tooltip>
                                     </TableCell>
                                     {MONTHS.map((month, monthIndex) => {
                                         let cumulativeSavings = 0;
                                         for (let i = 0; i <= monthIndex; i++) {
                                             const currentMonth = MONTHS[i];
-                                            // Calculate income (all income items)
                                             const totalIncome = lineItems
                                                 .filter(item => item.type === 'income')
                                                 .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
-                                            // Calculate expenses (all expenses EXCEPT Nordnet - Nordnet is savings, not an expense)
-                                            const totalExpense = lineItems
-                                                .filter(item => item.type === 'expense' && !isNordnetItem(item))
-                                                .reduce((sum, item) => sum + (item.months[currentMonth] || 0), 0);
-                                            // Cumulative Savings = Income - Expenses (Nordnet excluded)
-                                            cumulativeSavings += totalIncome - totalExpense;
+                                            cumulativeSavings += getMonthCashSavings(
+                                                totalIncome,
+                                                getLivingExpensesForMonth(currentMonth),
+                                                getNordnetNetForMonth(currentMonth)
+                                            );
                                         }
 
                                         return (
@@ -2386,17 +2638,21 @@ export default function Budget() {
                                             }),
                                         }}
                                     >
-                                        Nordnet Savings
+                                        <Tooltip
+                                            title="Cumulative Nordnet balance change. Positive months are deposits; enter a negative amount to record a withdrawal (cash back, not income)."
+                                            arrow
+                                        >
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                                Nordnet Savings
+                                                <InfoOutlinedIcon sx={{ fontSize: '1rem', opacity: 0.8 }} />
+                                            </Box>
+                                        </Tooltip>
                                     </TableCell>
                                     {MONTHS.map((month, monthIndex) => {
                                         let cumulativeNordnetSavings = 0;
                                         for (let i = 0; i <= monthIndex; i++) {
-                                            const currentMonth = MONTHS[i];
-                                            const nordnetExpense = lineItems
-                                                .filter(item => isNordnetItem(item))
-                                                .reduce((sum, item) => sum + Math.abs(item.months[currentMonth] || 0), 0);
-                                            // Nordnet expenses are actually savings, so we treat them as positive savings
-                                            cumulativeNordnetSavings += nordnetExpense;
+                                            // Signed: deposits increase, withdrawals decrease
+                                            cumulativeNordnetSavings += getNordnetNetForMonth(MONTHS[i]);
                                         }
 
                                         return (
@@ -3023,11 +3279,51 @@ export default function Budget() {
 
                 {/* Static Expenses List */}
                 <Paper sx={{ bgcolor: theme.palette.background.paper, padding: isMobile ? '1rem' : '2rem', marginTop: isMobile ? '1rem' : '2rem' }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: '1.5rem' }}>
-                        <LocalActivityIcon sx={{ color: theme.palette.warning.main }} />
-                        <Typography sx={{ color: theme.palette.text.primary }} variant="h5">
-                            Fun Expenses
-                        </Typography>
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            alignItems: isMobile ? 'flex-start' : 'center',
+                            justifyContent: 'space-between',
+                            gap: 2,
+                            marginBottom: '1.5rem',
+                            flexDirection: isMobile ? 'column' : 'row',
+                            flexWrap: 'wrap',
+                        }}
+                    >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <LocalActivityIcon sx={{ color: theme.palette.warning.main }} />
+                            <Typography sx={{ color: theme.palette.text.primary }} variant="h5">
+                                Fun Expenses
+                            </Typography>
+                        </Box>
+                        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 180 }}>
+                            <InputLabel id="fun-expense-sort-label">Sort by</InputLabel>
+                            <Select
+                                labelId="fun-expense-sort-label"
+                                label="Sort by"
+                                value={funExpenseSortBy}
+                                onChange={(e) => setFunExpenseSortBy(e.target.value as 'date' | 'amount' | 'category')}
+                                sx={{
+                                    color: theme.palette.text.primary,
+                                    '& .MuiOutlinedInput-notchedOutline': {
+                                        borderColor: theme.palette.secondary.main,
+                                    },
+                                }}
+                                MenuProps={{
+                                    disableScrollLock: true,
+                                    PaperProps: {
+                                        sx: {
+                                            bgcolor: theme.palette.background.paper,
+                                            color: theme.palette.text.primary,
+                                        },
+                                    },
+                                }}
+                            >
+                                <MenuItem value="date">Date</MenuItem>
+                                <MenuItem value="amount">Amount</MenuItem>
+                                <MenuItem value="category">Category</MenuItem>
+                            </Select>
+                        </FormControl>
                     </Box>
                     {lineItems.filter(item => item.type === 'expense' && item.isStaticExpense).length === 0 ? (
                         <Typography sx={{ color: theme.palette.text.secondary, fontStyle: 'italic' }}>
@@ -3053,7 +3349,7 @@ export default function Budget() {
                             }
                         });
 
-                        // Sort months and expenses within each month
+                        // Sort months chronologically; sort items within each month by selected criteria
                         const sortedMonths = Object.keys(expensesByMonth).sort((a, b) => {
                             // Put "Uncategorized" at the end
                             if (a === 'Uncategorized') return 1;
@@ -3068,17 +3364,33 @@ export default function Budget() {
                             return 0;
                         });
 
+                        const compareFunExpenses = (a: LineItem, b: LineItem): number => {
+                            if (funExpenseSortBy === 'amount') {
+                                const diff = (b.staticExpensePrice || 0) - (a.staticExpensePrice || 0);
+                                if (diff !== 0) return diff;
+                                return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+                            }
+                            if (funExpenseSortBy === 'category') {
+                                const catA = getFunExpenseDisplayCategory(a);
+                                const catB = getFunExpenseDisplayCategory(b);
+                                const catCmp = catA.localeCompare(catB, undefined, { sensitivity: 'base' });
+                                if (catCmp !== 0) return catCmp;
+                                const amtDiff = (b.staticExpensePrice || 0) - (a.staticExpensePrice || 0);
+                                if (amtDiff !== 0) return amtDiff;
+                                return (a.staticExpenseDate || '').localeCompare(b.staticExpenseDate || '');
+                            }
+                            // date (default): chronological within month; undated last
+                            const dateA = a.staticExpenseDate || '';
+                            const dateB = b.staticExpenseDate || '';
+                            if (!dateA && dateB) return 1;
+                            if (dateA && !dateB) return -1;
+                            const dateCmp = dateA.localeCompare(dateB);
+                            if (dateCmp !== 0) return dateCmp;
+                            return (b.staticExpensePrice || 0) - (a.staticExpensePrice || 0);
+                        };
+
                         sortedMonths.forEach(month => {
-                            expensesByMonth[month].sort((a, b) => {
-                                // For uncategorized, sort by name
-                                if (month === 'Uncategorized') {
-                                    return (a.name || '').localeCompare(b.name || '');
-                                }
-                                // For months with dates, sort by date
-                                const dateA = a.staticExpenseDate || '';
-                                const dateB = b.staticExpenseDate || '';
-                                return dateA.localeCompare(dateB);
-                            });
+                            expensesByMonth[month].sort(compareFunExpenses);
                         });
 
                         return (
@@ -4028,7 +4340,11 @@ export default function Budget() {
                 {/* Insights Modal */}
                 <Dialog
                     open={insightsModalOpen}
-                    onClose={() => setInsightsModalOpen(false)}
+                    onClose={() => {
+                        setInsightsModalOpen(false);
+                        setInsightsDrillCategory(null);
+                        setInsightsDrillSource(null);
+                    }}
                     fullScreen={isMobile}
                     maxWidth="lg"
                     fullWidth
@@ -4045,7 +4361,11 @@ export default function Budget() {
                             <Typography variant="h6">Budget Insights - {year}</Typography>
                         </Box>
                         <IconButton
-                            onClick={() => setInsightsModalOpen(false)}
+                            onClick={() => {
+                                setInsightsModalOpen(false);
+                                setInsightsDrillCategory(null);
+                                setInsightsDrillSource(null);
+                            }}
                             size="small"
                             sx={{
                                 color: theme.palette.text.secondary,
@@ -4069,8 +4389,37 @@ export default function Budget() {
                                     ? getTypicalMixScoreColor(insights.benchmarkSimilarityScore)
                                     : undefined;
 
+                            const incompleteIdx =
+                                insights.incompleteMonth != null
+                                    ? MONTHS.indexOf(insights.incompleteMonth)
+                                    : -1;
+
                             return (
                                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+                                        <Chip
+                                            size="small"
+                                            label={insights.periodLabel}
+                                            sx={{ bgcolor: theme.palette.background.default, color: theme.palette.text.primary }}
+                                        />
+                                        {insights.incompleteMonth && (
+                                            <Chip
+                                                size="small"
+                                                color="warning"
+                                                variant="outlined"
+                                                label={`${insights.incompleteMonth} incomplete — excluded from averages & best/worst`}
+                                            />
+                                        )}
+                                    </Box>
+
+                                    {insights.funDataDrift > 1 && (
+                                        <Alert severity="warning">
+                                            Fun expenses data drift: list total {formatBudgetAmount(insights.funFromPrices)} vs
+                                            month cells {formatBudgetAmount(insights.funFromMonths)} (diff{' '}
+                                            {formatBudgetAmount(insights.funDataDrift)}). Prefer editing fun items via the Fun Expenses UI.
+                                        </Alert>
+                                    )}
+
                                     {/* Benchmark vs typical one-person spending mix */}
                                     <Paper
                                         sx={{
@@ -4082,10 +4431,10 @@ export default function Budget() {
                                         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                                             <Box sx={{ flex: 1, minWidth: isMobile ? '100%' : 200 }}>
                                                 <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem', fontWeight: 600 }}>
-                                                    Typical spending mix score
+                                                    Category mix similarity (illustrative)
                                                 </Typography>
                                                 <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', mt: 0.5, lineHeight: 1.4 }}>
-                                                    How closely your category split matches an illustrative average one-person budget (consumer survey–style shares). This measures resemblance to common patterns, not whether your plan is good or bad.
+                                                    Cosine similarity to an illustrative one-person category mix — not a judgment of whether your budget is good or healthy.
                                                 </Typography>
                                             </Box>
                                             {insights.benchmarkSimilarityScore == null ? (
@@ -4127,26 +4476,32 @@ export default function Budget() {
                                             )}
                                         </Box>
                                         {(() => {
+                                            const income = Math.max(insights.totalIncome, 0);
+                                            if (income <= 0) return null;
                                             const funExpenses = Math.max(insights.totalFunExpenses, 0);
-                                            // Fun expenses live in the monthly grid too, so pull them out of totalExpense
-                                            // instead of subtracting them again from savings.
-                                            const expenses = Math.max(insights.totalExpense - funExpenses, 0);
-                                            const savings = Math.max(insights.totalSavings, 0);
-                                            const total = expenses + funExpenses + savings;
-                                            if (total <= 0) return null;
+                                            // Gross living (before withdrawal offset) so the bar still sums to income
+                                            const living = Math.max(insights.totalLivingExpense ?? 0, 0);
+                                            const budgetExpenses = Math.max(living - funExpenses, 0);
+                                            const nordnetNet = insights.totalNordnetSavings;
+                                            const nordnetHeld = Math.max(nordnetNet, 0);
+                                            const cashSavings = insights.totalSavings;
+                                            const cashBar = Math.max(cashSavings, 0);
+                                            const pct = (value: number) => (value / income) * 100;
                                             const segments = [
-                                                { label: 'Expenses', value: expenses, color: '#f44336' },
+                                                { label: 'Budget expenses', value: budgetExpenses, color: '#f44336' },
                                                 { label: 'Fun expenses', value: funExpenses, color: '#ff9800' },
-                                                { label: 'Savings', value: savings, color: '#4caf50' },
-                                            ].filter((s) => s.value > 0);
+                                                { label: 'Nordnet', value: nordnetHeld, color: '#9c27b0' },
+                                                { label: 'Cash', value: cashBar, displayValue: cashSavings, color: '#4caf50' },
+                                            ].filter((s) => s.value > 0 || (s.label === 'Cash' && cashSavings !== 0));
+                                            if (segments.length === 0) return null;
                                             return (
                                                 <Box sx={{ mt: 2 }}>
                                                     <Box sx={{ display: 'flex', height: 16, borderRadius: 1, overflow: 'hidden', bgcolor: theme.palette.background.paper }}>
                                                         {segments.map((s) => (
                                                             <Box
                                                                 key={s.label}
-                                                                title={`${s.label}: ${formatBudgetPercent((s.value / total) * 100)}%`}
-                                                                sx={{ width: `${(s.value / total) * 100}%`, bgcolor: s.color }}
+                                                                title={`${s.label}: ${formatBudgetPercent(pct(s.value))}% of income`}
+                                                                sx={{ width: `${pct(s.value)}%`, bgcolor: s.color }}
                                                             />
                                                         ))}
                                                     </Box>
@@ -4156,7 +4511,12 @@ export default function Budget() {
                                                                 <Box sx={{ width: 10, height: 10, borderRadius: '2px', bgcolor: s.color }} />
                                                                 <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary }}>
                                                                     {s.label}
-                                                                    {!hideBudgetNumbers && ` · ${formatBudgetPercent((s.value / total) * 100)}%`}
+                                                                    {!hideBudgetNumbers && (
+                                                                        <>
+                                                                            {' · '}{formatBudgetAmount(('displayValue' in s ? s.displayValue : s.value) as number)}
+                                                                            {' · '}{formatBudgetPercent(pct(Math.abs(('displayValue' in s ? s.displayValue : s.value) as number)))}%
+                                                                        </>
+                                                                    )}
                                                                 </Typography>
                                                             </Box>
                                                         ))}
@@ -4184,22 +4544,29 @@ export default function Budget() {
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                 <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                    Total Expenses
+                                                    Expenses (net)
                                                 </Typography>
-                                                <Tooltip title="The sum of all expense line items across every month (Nordnet/stock savings excluded, since those count as savings)." arrow>
+                                                <Tooltip title="Living / consumption minus Nordnet withdrawals. See reconciliation above for Living vs this number." arrow>
                                                     <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
                                                 </Tooltip>
                                             </Box>
                                             <Typography sx={{ color: '#f44336', fontSize: '1.5rem', fontWeight: 'bold', mt: 0.5 }}>
                                                 {formatBudgetAmount(insights.totalExpense)}
                                             </Typography>
+                                            {!hideBudgetNumbers && (
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', mt: 0.5 }}>
+                                                    Living {formatBudgetAmount(insights.totalLivingExpense)}
+                                                    {insights.totalWithdrawals > 0 &&
+                                                        ` − withdrawals ${formatBudgetAmount(insights.totalWithdrawals)}`}
+                                                </Typography>
+                                            )}
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                 <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                    Total Savings
+                                                    Cash Savings
                                                 </Typography>
-                                                <Tooltip title="The absolute amount left over: Total Income minus Total Expenses." arrow>
+                                                <Tooltip title="Cash after living costs and Nordnet transfers (deposits out, withdrawals in)." arrow>
                                                     <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
                                                 </Tooltip>
                                             </Box>
@@ -4211,13 +4578,19 @@ export default function Budget() {
                                             }}>
                                                 {formatBudgetAmount(insights.totalSavings)}
                                             </Typography>
+                                            {!hideBudgetNumbers && (
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.75rem', mt: 0.5 }}>
+                                                    Wealth {formatBudgetAmount(insights.totalEconomicSavings)}
+                                                    {' '}(cash + Nordnet)
+                                                </Typography>
+                                            )}
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                 <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem' }}>
-                                                    Savings Rate
+                                                    Savings rates
                                                 </Typography>
-                                                <Tooltip title="The share of income you keep: Total Savings divided by Total Income, shown as a percentage." arrow>
+                                                <Tooltip title="Economic = (income − living) ÷ income. Cash = cash savings ÷ income. Nordnet deposits raise economic rate but lower cash rate." arrow>
                                                     <InfoOutlinedIcon sx={{ fontSize: '1rem', color: theme.palette.text.secondary, cursor: 'help' }} />
                                                 </Tooltip>
                                             </Box>
@@ -4228,14 +4601,25 @@ export default function Budget() {
                                                 mt: 0.5
                                             }}>
                                                 {formatBudgetPercent(insights.savingsRate)}%
+                                                <Typography component="span" sx={{ fontSize: '0.55em', fontWeight: 600, color: theme.palette.text.secondary, ml: 0.75 }}>
+                                                    economic
+                                                </Typography>
                                             </Typography>
+                                            {!hideBudgetNumbers && (
+                                                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.85rem', mt: 0.5 }}>
+                                                    Cash rate {formatBudgetPercent(insights.cashSavingsRate)}%
+                                                </Typography>
+                                            )}
                                         </Paper>
                                     </Box>
 
                                     {/* Monthly Column Chart */}
                                     <Paper sx={{ p: isMobile ? 1.5 : isTablet ? 1.75 : 2, bgcolor: theme.palette.background.default }}>
-                                        <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary, fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem' }}>
+                                        <Typography variant="h6" sx={{ mb: 0.5, color: theme.palette.text.primary, fontSize: isMobile ? '1rem' : isTablet ? '1.1rem' : '1.25rem' }}>
                                             Monthly Overview
+                                        </Typography>
+                                        <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary, mb: 2 }}>
+                                            Bars: income &amp; expenses (net). Labels show cash savings. Incomplete months are marked.
                                         </Typography>
                                         {(() => {
                                             const narrowMonthChart = isMobile || isTablet;
@@ -4272,10 +4656,11 @@ export default function Budget() {
                                                 mb: 2,
                                                 minWidth: chartRowMinWidth,
                                             }}>
-                                                {insights.monthlyData.map((data) => {
+                                                {insights.monthlyData.map((data, monthIdx) => {
                                                     const incomeHeight = (data.income / maxValue) * 100;
                                                     const expenseHeight = (data.expense / maxValue) * 100;
-                                                    const savings = data.income - data.expense;
+                                                    const savings = data.savings;
+                                                    const isIncomplete = monthIdx === incompleteIdx;
 
                                                     return (
                                                         <Box key={data.month} sx={{
@@ -4341,14 +4726,17 @@ export default function Budget() {
                                                                 }} />
                                                             </Box>
                                                             {/* Month Label */}
-                                                            <Typography sx={{
+                                                            <Typography
+                                                                title={isIncomplete ? 'Incomplete current month' : undefined}
+                                                                sx={{
                                                                 fontSize: isMobile ? '0.65rem' : isDesktop ? '0.7rem' : '0.65rem',
-                                                                color: theme.palette.text.secondary,
+                                                                color: isIncomplete ? theme.palette.warning.main : theme.palette.text.secondary,
                                                                 textAlign: 'center',
                                                                 mt: 0.5,
-                                                                fontWeight: isMobile ? 500 : isDesktop ? 400 : 500
+                                                                fontWeight: isIncomplete ? 700 : isMobile ? 500 : isDesktop ? 400 : 500,
+                                                                opacity: isIncomplete ? 0.95 : 1,
                                                             }}>
-                                                                {data.month.substring(0, 3)}
+                                                                {data.month.substring(0, 3)}{isIncomplete ? '*' : ''}
                                                             </Typography>
                                                             {/* Value Labels — fixed-width columns on phone/tablet; stack net + % to avoid overlap */}
                                                             <Box sx={{
@@ -4834,7 +5222,11 @@ export default function Budget() {
                                                 <FormControl size="small" sx={{ minWidth: (isMobile || isTablet) ? '100%' : 150 }}>
                                                     <Select
                                                         value={selectedMonthForChart}
-                                                        onChange={(e) => setSelectedMonthForChart(e.target.value)}
+                                                        onChange={(e) => {
+                                                            setSelectedMonthForChart(e.target.value);
+                                                            setInsightsDrillCategory(null);
+                                                            setInsightsDrillSource(null);
+                                                        }}
                                                         sx={{
                                                             color: theme.palette.text.primary,
                                                             fontSize: isMobile ? '0.875rem' : isTablet ? '0.9rem' : '1rem',
@@ -4869,16 +5261,35 @@ export default function Budget() {
                                             </Box>
                                             <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary, mb: 2 }}>
                                                 {selectedMonthForChart === 'all'
-                                                    ? 'Full year per category. Sorted by amount (highest first), then category name.'
-                                                    : `${selectedMonthForChart} only. Sorted by amount (highest first), then category name.`}
+                                                    ? 'Full year per category (gross living). Click a category to see line items.'
+                                                    : `${selectedMonthForChart} only. Click a category to see line items.`}
                                             </Typography>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                                                 {insights.categoryBreakdown.map((item, index) => {
                                                     const denom = insights.totalExpenseForCategoryScope || 0;
                                                     const percentage = denom > 0 ? (item.amount / denom) * 100 : 0;
                                                     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50'];
+                                                    const selected = insightsDrillSource === 'expense' && insightsDrillCategory === item.category;
                                                     return (
-                                                        <Box key={item.category}>
+                                                        <Box
+                                                            key={item.category}
+                                                            onClick={() => {
+                                                                if (selected) {
+                                                                    setInsightsDrillCategory(null);
+                                                                    setInsightsDrillSource(null);
+                                                                } else {
+                                                                    setInsightsDrillCategory(item.category);
+                                                                    setInsightsDrillSource('expense');
+                                                                }
+                                                            }}
+                                                            sx={{
+                                                                cursor: 'pointer',
+                                                                p: 0.75,
+                                                                borderRadius: 1,
+                                                                bgcolor: selected ? theme.palette.background.paper : 'transparent',
+                                                                '&:hover': { bgcolor: theme.palette.background.paper },
+                                                            }}
+                                                        >
                                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                                                                 <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.primary, fontWeight: 500 }}>
                                                                     {item.category}
@@ -4911,14 +5322,65 @@ export default function Budget() {
                                                     );
                                                 })}
                                             </Box>
+                                            {insightsDrillSource === 'expense' && insightsDrillCategory && (() => {
+                                                const scopeMonth = selectedMonthForChart;
+                                                const rows = lineItems
+                                                    .filter(
+                                                        (item) =>
+                                                            item.type === 'expense' &&
+                                                            !isNordnetItem(item) &&
+                                                            (item.category || 'Other') === insightsDrillCategory
+                                                    )
+                                                    .map((item) => {
+                                                        const amount =
+                                                            !scopeMonth || scopeMonth === 'all'
+                                                                ? MONTHS.reduce((s, m) => s + (item.months[m] || 0), 0)
+                                                                : item.months[scopeMonth] || 0;
+                                                        return { id: item.id, name: item.name, amount, isFun: !!item.isStaticExpense };
+                                                    })
+                                                    .filter((r) => r.amount > 0)
+                                                    .sort((a, b) => b.amount - a.amount);
+                                                return (
+                                                    <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${theme.palette.secondary.main}` }}>
+                                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                                            <Typography sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                                                                {insightsDrillCategory} — line items
+                                                            </Typography>
+                                                            <Button size="small" onClick={() => { setInsightsDrillCategory(null); setInsightsDrillSource(null); }} sx={{ textTransform: 'none' }}>
+                                                                Close
+                                                            </Button>
+                                                        </Box>
+                                                        {rows.length === 0 ? (
+                                                            <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.secondary }}>No lines in this scope.</Typography>
+                                                        ) : (
+                                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, maxHeight: 220, overflowY: 'auto' }}>
+                                                                {rows.map((r) => (
+                                                                    <Box key={r.id} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                                                                        <Typography sx={{ fontSize: '0.8rem', color: theme.palette.text.primary }}>
+                                                                            {r.name}{r.isFun ? ' (fun)' : ''}
+                                                                        </Typography>
+                                                                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: '#f44336' }}>
+                                                                            {formatBudgetAmount(r.amount)}
+                                                                        </Typography>
+                                                                    </Box>
+                                                                ))}
+                                                            </Box>
+                                                        )}
+                                                    </Box>
+                                                );
+                                            })()}
                                         </Paper>
                                     )}
 
                                     {/* Statistics */}
                                     <Box sx={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: 2 }}>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography variant="h6" sx={{ mb: 1, color: theme.palette.text.primary }}>
+                                            <Typography variant="h6" sx={{ mb: 0.5, color: theme.palette.text.primary }}>
                                                 Averages
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary, mb: 1 }}>
+                                                Based on {insights.averageMonthsUsed} complete month{insights.averageMonthsUsed === 1 ? '' : 's'} with activity
+                                                {insights.incompleteMonth ? ` (${insights.incompleteMonth}* excluded)` : ''}.
                                             </Typography>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                                 <Box>
@@ -4931,7 +5393,7 @@ export default function Budget() {
                                                 </Box>
                                                 <Box>
                                                     <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
-                                                        Monthly Expense
+                                                        Monthly Expense (net)
                                                     </Typography>
                                                     <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
                                                         {formatBudgetAmount(insights.averageMonthlyExpense)}
@@ -4951,8 +5413,11 @@ export default function Budget() {
                                             </Box>
                                         </Paper>
                                         <Paper sx={{ p: 2, bgcolor: theme.palette.background.default }}>
-                                            <Typography variant="h6" sx={{ mb: 1, color: theme.palette.text.primary }}>
+                                            <Typography variant="h6" sx={{ mb: 0.5, color: theme.palette.text.primary }}>
                                                 Highlights
+                                            </Typography>
+                                            <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary, mb: 1 }}>
+                                                Best/worst by cash savings among complete months only.
                                             </Typography>
                                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                                 <Box>
@@ -4960,7 +5425,9 @@ export default function Budget() {
                                                         Best Month
                                                     </Typography>
                                                     <Typography sx={{ color: '#4caf50', fontWeight: 'bold' }}>
-                                                        {insights.bestMonth.month}: {formatBudgetAmount(insights.bestMonth.savings)}
+                                                        {insights.bestMonth.month
+                                                            ? `${insights.bestMonth.month}: ${formatBudgetAmount(insights.bestMonth.savings)}`
+                                                            : '—'}
                                                     </Typography>
                                                 </Box>
                                                 <Box>
@@ -4968,15 +5435,22 @@ export default function Budget() {
                                                         Worst Month
                                                     </Typography>
                                                     <Typography sx={{ color: '#f44336', fontWeight: 'bold' }}>
-                                                        {insights.worstMonth.month}: {formatBudgetAmount(insights.worstMonth.savings)}
+                                                        {insights.worstMonth.month
+                                                            ? `${insights.worstMonth.month}: ${formatBudgetAmount(insights.worstMonth.savings)}`
+                                                            : '—'}
                                                     </Typography>
                                                 </Box>
-                                                {insights.totalNordnetSavings > 0 && (
+                                                {insights.totalNordnetSavings !== 0 && (
                                                     <Box>
-                                                        <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
-                                                            Nordnet Savings
-                                                        </Typography>
-                                                        <Typography sx={{ color: '#9c27b0', fontWeight: 'bold' }}>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography sx={{ fontSize: '0.875rem', color: theme.palette.text.secondary }}>
+                                                                Nordnet (net)
+                                                            </Typography>
+                                                            <Tooltip title="Net transfers this year: deposits minus withdrawals. Withdrawals are not income — they return cash and boost Savings for that month." arrow>
+                                                                <InfoOutlinedIcon sx={{ fontSize: '0.95rem', color: theme.palette.text.secondary, cursor: 'help' }} />
+                                                            </Tooltip>
+                                                        </Box>
+                                                        <Typography sx={{ color: insights.totalNordnetSavings >= 0 ? '#9c27b0' : '#ef6c00', fontWeight: 'bold' }}>
                                                             {formatBudgetAmount(insights.totalNordnetSavings)}
                                                         </Typography>
                                                     </Box>
@@ -4989,6 +5463,29 @@ export default function Budget() {
                         })()}
                     </DialogContent>
                 </Dialog>
+
+                <BankReconcileDialog
+                    open={reconcileModalOpen}
+                    onClose={() => setReconcileModalOpen(false)}
+                    budgetYear={year || ''}
+                    yearOverview={yearOverview}
+                    currency={currency}
+                    hideNumbers={hideBudgetNumbers}
+                />
+
+                {user?.id && (
+                    <CategoryBudgetCompareDialog
+                        open={categoryCompareOpen}
+                        onClose={() => setCategoryCompareOpen(false)}
+                        budgetYear={year || ''}
+                        userId={user.id}
+                        apiBaseUrl={API_BASE_URL}
+                        lineItems={lineItems}
+                        currency={currency}
+                        hideNumbers={hideBudgetNumbers}
+                        categoryBudgets={categoryBudgets}
+                    />
+                )}
 
                 {/* Edit Expense Modal */}
                 <Dialog

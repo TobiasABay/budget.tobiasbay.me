@@ -13,11 +13,15 @@ import CreditCardIcon from '@mui/icons-material/CreditCard';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import DownloadIcon from '@mui/icons-material/Download';
 import TableChartIcon from '@mui/icons-material/TableChart';
+import CategoryIcon from '@mui/icons-material/Category';
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { getStoredCurrency, setStoredCurrency, CURRENCIES, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
+import { isInvestmentTransferItem, summarizeBudgetYear } from "../utils/budgetMath";
+import { extractCategoryBudgetsFromItems } from "../utils/categoryBudgets";
+import CategoryBudgetsDialog from "../components/CategoryBudgetsDialog";
 
 interface Loan {
   id: string;
@@ -36,9 +40,6 @@ const BUDGET_REPORT_MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
-function isNordnetBudgetItem(item: { type?: string; name?: string }): boolean {
-  return item.type === 'expense' && String(item.name || '').toLowerCase().trim().includes('nordnet');
-}
 
 function formatPdfMoney(amount: number, currency: Currency): string {
   if (amount === 0) {
@@ -286,6 +287,7 @@ export default function SettingsPage() {
   const [downloading, setDownloading] = useState<boolean>(false);
   const [downloadingExcel, setDownloadingExcel] = useState<boolean>(false);
   const [downloadingBudgetYear, setDownloadingBudgetYear] = useState<string | null>(null);
+  const [categoryBudgetsYear, setCategoryBudgetsYear] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoaded && user?.id) {
@@ -531,8 +533,8 @@ export default function SettingsPage() {
             },
           });
           if (response.ok) {
-            const items = await response.json();
-            budgetDataMap[year] = items;
+            const raw = await response.json();
+            budgetDataMap[year] = extractCategoryBudgetsFromItems(raw).items;
           }
         } catch (err) {
           console.error(`Error fetching budget data for ${year}:`, err);
@@ -636,8 +638,8 @@ export default function SettingsPage() {
             },
           });
           if (response.ok) {
-            const items = await response.json();
-            budgetDataMap[year] = items;
+            const raw = await response.json();
+            budgetDataMap[year] = extractCategoryBudgetsFromItems(raw).items;
           }
         } catch (err) {
           console.error(`Error fetching budget data for ${year}:`, err);
@@ -828,30 +830,31 @@ export default function SettingsPage() {
         throw new Error(message);
       }
 
-      const items: any[] = await response.json();
+      const rawItems: any[] = await response.json();
+      const items: any[] = extractCategoryBudgetsFromItems(rawItems).items;
       const currencyObj = getStoredCurrency();
+      const rollup = summarizeBudgetYear(items, { budgetYear: year });
 
-      const monthlyRows = BUDGET_REPORT_MONTHS.map((month) => {
-        const income = items
-          .filter((i: any) => i.type === 'income')
-          .reduce((sum: number, i: any) => sum + (Number(i.months?.[month]) || 0), 0);
-        const expenses = items
-          .filter((i: any) => i.type === 'expense' && !isNordnetBudgetItem(i))
-          .reduce((sum: number, i: any) => sum + (Number(i.months?.[month]) || 0), 0);
-        return { month, income, expenses, net: income - expenses };
-      });
+      const monthlyRows = rollup.months.map((m) => ({
+        month: m.month,
+        income: m.income,
+        expenses: m.netExpense,
+        net: m.cashSavings,
+      }));
 
-      const totalIncome = monthlyRows.reduce((s, r) => s + r.income, 0);
-      const totalExpenses = monthlyRows.reduce((s, r) => s + r.expenses, 0);
-      const totalNet = totalIncome - totalExpenses;
-      const savingsRatePct = totalIncome > 0 ? (totalNet / totalIncome) * 100 : 0;
+      const totalIncome = rollup.totalIncome;
+      const totalExpenses = rollup.totalNetExpense;
+      const totalCash = rollup.totalCashSavings;
+      const totalNordnet = rollup.totalNordnet;
+      const wealth = rollup.wealth;
+      const savingsRatePct = rollup.savingsRate;
 
       const incomeLines = items.filter((i: any) => i.type === 'income').length;
       const expenseLines = items.filter((i: any) => i.type === 'expense').length;
 
       const expensesByCategory: Record<string, number> = {};
       items
-        .filter((i: any) => i.type === 'expense' && !isNordnetBudgetItem(i))
+        .filter((i: any) => i.type === 'expense' && !isInvestmentTransferItem(i))
         .forEach((item: any) => {
           const cat = (item.category && String(item.category).trim()) || 'Other';
           BUDGET_REPORT_MONTHS.forEach((m) => {
@@ -886,10 +889,12 @@ export default function SettingsPage() {
         head: [['Summary', 'Annual total']],
         body: [
           ['Total income', formatPdfMoney(totalIncome, currencyObj)],
-          ['Total expenses (excl. Nordnet-style savings lines)', formatPdfMoney(totalExpenses, currencyObj)],
-          ['Net', formatPdfMoney(totalNet, currencyObj)],
+          ['Total expenses (living − Nordnet withdrawals)', formatPdfMoney(totalExpenses, currencyObj)],
+          ['Cash savings', formatPdfMoney(totalCash, currencyObj)],
+          ['Nordnet (net)', formatPdfMoney(totalNordnet, currencyObj)],
+          ['Wealth (cash + Nordnet)', formatPdfMoney(wealth, currencyObj)],
           ...(totalIncome > 0
-            ? [['Savings rate (net / income)', `${savingsRatePct.toFixed(1)}%`]]
+            ? [['Savings rate (income − living) / income', `${savingsRatePct.toFixed(1)}%`]]
             : []),
         ],
         styles: { fontSize: 9, cellPadding: 3 },
@@ -903,7 +908,7 @@ export default function SettingsPage() {
 
       autoTable(doc, {
         startY: afterChart + 6,
-        head: [['Month', 'Income', 'Expenses', 'Net']],
+        head: [['Month', 'Income', 'Expenses', 'Cash']],
         body: monthlyRows.map((r) => [
           r.month.slice(0, 3),
           formatPdfMoney(r.income, currencyObj),
@@ -1223,6 +1228,26 @@ export default function SettingsPage() {
                           </Box>
                           <IconButton
                             edge="end"
+                            title="Set category budgets"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCategoryBudgetsYear(year);
+                            }}
+                            disabled={!isLoaded || !user?.id}
+                            sx={{
+                              color: theme.palette.secondary.light,
+                              '&:hover': {
+                                bgcolor: theme.palette.secondary.main,
+                                color: theme.palette.secondary.contrastText,
+                                transform: 'scale(1.1)',
+                              },
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <CategoryIcon />
+                          </IconButton>
+                          <IconButton
+                            edge="end"
                             title="Download PDF overview"
                             onClick={(e) => handleDownloadBudgetReport(year, e)}
                             disabled={!isLoaded || !user?.id || downloadingBudgetYear !== null}
@@ -1459,6 +1484,17 @@ export default function SettingsPage() {
         </Paper>
 
         {/* Delete Confirmation Dialog */}
+        {categoryBudgetsYear && user?.id && (
+          <CategoryBudgetsDialog
+            open={Boolean(categoryBudgetsYear)}
+            onClose={() => setCategoryBudgetsYear(null)}
+            budgetYear={categoryBudgetsYear}
+            userId={user.id}
+            currency={currency}
+            apiBaseUrl={API_BASE_URL}
+          />
+        )}
+
         <Dialog
           open={deleteDialogOpen}
           onClose={handleDeleteCancel}

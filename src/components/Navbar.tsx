@@ -13,7 +13,6 @@ import CloseIcon from '@mui/icons-material/Close';
 import { UserButton, useUser } from '@clerk/clerk-react';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
-import AssignmentIndIcon from '@mui/icons-material/AssignmentInd';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 
 
@@ -51,7 +50,6 @@ export default function Navbar() {
 
   const menuItems = [
     { text: 'Loans', icon: <PaymentsIcon />, path: '/loans' },
-    { text: 'Insurance', icon: <AssignmentIndIcon />, path: '/insurance' },
     { text: 'Stocks', icon: <TrendingUpIcon />, path: '/stocks' },
   ];
 

@@ -67,24 +67,27 @@ export function formatCurrency(amount: number, currency: Currency): string {
     return '';
   }
 
+  const sign = amount < 0 ? '-' : '';
+  const abs = Math.abs(amount);
+
   // Check if the number is a whole number (no decimal part)
-  const isWholeNumber = amount % 1 === 0;
+  const isWholeNumber = abs % 1 === 0;
 
   // For no currency, show number without decimals if it's a whole number
   if (currency.code === 'NONE') {
-    return isWholeNumber ? amount.toString() : amount.toFixed(2);
+    return sign + (isWholeNumber ? abs.toString() : abs.toFixed(2));
   }
 
   // For JPY, don't show decimals
   if (currency.code === 'JPY') {
-    return `${currency.symbol}${Math.round(amount).toLocaleString()}`;
+    return `${sign}${currency.symbol}${Math.round(abs).toLocaleString()}`;
   }
 
   // For other currencies, show without decimals if whole number, otherwise 2 decimal places
   if (isWholeNumber) {
-    return `${currency.symbol}${Math.round(amount).toLocaleString()}`;
+    return `${sign}${currency.symbol}${Math.round(abs).toLocaleString()}`;
   }
-  return `${currency.symbol}${amount.toFixed(2)}`;
+  return `${sign}${currency.symbol}${abs.toFixed(2)}`;
 }
 
 
