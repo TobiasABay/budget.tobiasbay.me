@@ -1,15 +1,36 @@
 import { theme } from "../ColorTheme";
 import Navbar from "../components/Navbar";
-import { Box, Typography, Table, TableHead, TableBody, TableRow, TableCell, Paper, CircularProgress, TextField, Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, useMediaQuery, useTheme } from "@mui/material";
-import { useState, useEffect } from "react";
+import {
+    Box,
+    Typography,
+    Table,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableCell,
+    Paper,
+    CircularProgress,
+    TextField,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    Button,
+    IconButton,
+    Chip,
+    useMediaQuery,
+    useTheme,
+} from "@mui/material";
+import { useState, useEffect, useMemo } from "react";
 import { useUser } from "@clerk/clerk-react";
 import { getStoredCurrency, formatCurrency } from "../utils/currency";
 import type { Currency } from "../utils/currency";
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import { extractCategoryBudgetsFromItems } from "../utils/categoryBudgets";
+import { buildLoanSummaries, type BudgetItemLike } from "../utils/loanPayments";
 
-// Use production API URL so local and production frontends use the same backend and database
-// In dev mode, connect directly to production API. In production, use relative path.
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface Loan {
@@ -22,21 +43,11 @@ interface Loan {
     updatedAt?: string;
 }
 
-interface BudgetItem {
-    id: string;
-    name: string;
-    type: 'income' | 'expense';
-    months: { [key: string]: number };
-    linkedLoanId?: string;
-}
-
-interface LoanPayment {
-    year: string;
-    loanId: string;
-    loanName: string;
-    totalPayment: number;
-    remaining: number;
-    createdAt?: string;
+function formatPaymentDate(iso: string): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return iso;
+    const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 export default function Loan() {
@@ -44,7 +55,7 @@ export default function Loan() {
     const muiTheme = useTheme();
     const isMobile = useMediaQuery(muiTheme.breakpoints.down('sm'));
     const [loans, setLoans] = useState<Loan[]>([]);
-    const [budgetData, setBudgetData] = useState<{ [year: string]: BudgetItem[] }>({});
+    const [budgetData, setBudgetData] = useState<{ [year: string]: BudgetItemLike[] }>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [currency, setCurrency] = useState<Currency>(getStoredCurrency());
@@ -53,19 +64,16 @@ export default function Loan() {
     const [loanAmount, setLoanAmount] = useState('');
     const [loanStartDate, setLoanStartDate] = useState('');
 
-    // Load loans and budget data on mount
     useEffect(() => {
         if (isLoaded && user?.id) {
             loadData();
         }
     }, [isLoaded, user?.id]);
 
-    // Listen for currency changes in localStorage
     useEffect(() => {
         const handleStorageChange = (e: StorageEvent) => {
             if (e.key === 'budget_currency' && e.newValue) {
-                const newCurrency = getStoredCurrency();
-                setCurrency(newCurrency);
+                setCurrency(getStoredCurrency());
             }
         };
 
@@ -89,7 +97,6 @@ export default function Loan() {
 
         setLoading(true);
         try {
-            // Load loans
             const loansResponse = await fetch(`${API_BASE_URL}/loans`, {
                 method: 'GET',
                 headers: {
@@ -99,11 +106,9 @@ export default function Loan() {
             });
 
             if (loansResponse.ok) {
-                const loansData = await loansResponse.json();
-                setLoans(loansData);
+                setLoans(await loansResponse.json());
             }
 
-            // Load all budgets
             const budgetsResponse = await fetch(`${API_BASE_URL}/budgets`, {
                 method: 'GET',
                 headers: {
@@ -114,9 +119,8 @@ export default function Loan() {
 
             if (budgetsResponse.ok) {
                 const years = await budgetsResponse.json();
-                const budgetDataMap: { [year: string]: BudgetItem[] } = {};
+                const budgetDataMap: { [year: string]: BudgetItemLike[] } = {};
 
-                // Load data for each year
                 for (const year of years) {
                     const encodedYear = encodeURIComponent(year);
                     const response = await fetch(`${API_BASE_URL}/budgets/${encodedYear}/data`, {
@@ -128,8 +132,8 @@ export default function Loan() {
                     });
 
                     if (response.ok) {
-                        const items = await response.json();
-                        budgetDataMap[year] = items;
+                        const raw = await response.json();
+                        budgetDataMap[year] = extractCategoryBudgetsFromItems(raw).items as BudgetItemLike[];
                     }
                 }
 
@@ -195,51 +199,10 @@ export default function Loan() {
         }
     };
 
-    // Calculate payments and remaining balance for each loan
-    const calculateLoanPayments = (): LoanPayment[] => {
-        const payments: LoanPayment[] = [];
-        const years = Object.keys(budgetData).sort();
-
-        for (const loan of loans) {
-            let remaining = loan.amount;
-            const startDate = new Date(loan.startDate);
-            const startYear = startDate.getFullYear().toString();
-
-            for (const year of years) {
-                if (parseInt(year) < parseInt(startYear)) continue;
-
-                const items = budgetData[year] || [];
-                const linkedItems = items.filter(item => item.linkedLoanId === loan.id && item.type === 'expense');
-
-                // Calculate total payment for this year
-                let totalPayment = 0;
-                for (const item of linkedItems) {
-                    for (const month in item.months) {
-                        totalPayment += item.months[month] || 0;
-                    }
-                }
-
-                if (totalPayment > 0 || parseInt(year) === parseInt(startYear)) {
-                    remaining = Math.max(0, remaining - totalPayment);
-                    payments.push({
-                        year,
-                        loanId: loan.id,
-                        loanName: loan.name,
-                        totalPayment,
-                        remaining,
-                        createdAt: loan.createdAt,
-                    });
-                }
-            }
-        }
-
-        // Sort by year descending (most recent first), then by loan name
-        return payments.sort((a, b) => {
-            const yearDiff = parseInt(b.year) - parseInt(a.year);
-            if (yearDiff !== 0) return yearDiff;
-            return a.loanName.localeCompare(b.loanName);
-        });
-    };
+    const loanSummaries = useMemo(
+        () => buildLoanSummaries(loans, budgetData),
+        [loans, budgetData]
+    );
 
     if (loading) {
         return (
@@ -252,9 +215,6 @@ export default function Loan() {
         );
     }
 
-    const loanPayments = calculateLoanPayments();
-    const currencyText = currency.code === 'NONE' ? 'Figures' : `Figures in ${currency.code}`;
-
     return (
         <Box sx={{ bgcolor: theme.palette.background.default }} minHeight="100vh" display="flex" flexDirection="column">
             <Navbar />
@@ -262,14 +222,14 @@ export default function Loan() {
                 padding: isMobile ? '1rem' : '2rem',
                 flex: 1,
                 width: '100%',
-                overflow: 'hidden',
-                maxWidth: '100%'
+                maxWidth: '960px',
+                margin: '0 auto',
             }}>
                 <Box sx={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: isMobile ? '1rem' : '2rem',
+                    marginBottom: isMobile ? '1rem' : '1.5rem',
                     flexWrap: 'wrap',
                     gap: 2
                 }}>
@@ -284,6 +244,7 @@ export default function Loan() {
                         sx={{
                             bgcolor: theme.palette.primary.main,
                             color: theme.palette.primary.contrastText,
+                            textTransform: 'none',
                             '&:hover': {
                                 bgcolor: theme.palette.primary.dark,
                             },
@@ -293,183 +254,201 @@ export default function Loan() {
                     </Button>
                 </Box>
 
-                <Paper sx={{
-                    bgcolor: theme.palette.background.paper,
-                    overflow: 'auto',
-                    width: '100%',
-                    maxWidth: '100%',
-                    '&::-webkit-scrollbar': {
-                        height: '8px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                        background: theme.palette.background.default,
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                        background: theme.palette.secondary.main,
-                        borderRadius: '4px',
-                    },
-                }}>
-                    <Table stickyHeader sx={{
-                        tableLayout: isMobile ? 'auto' : 'fixed',
-                        width: isMobile ? 'max-content' : '100%',
-                        minWidth: isMobile ? '600px' : 'auto'
-                    }}>
-                        <TableHead>
-                            <TableRow>
-                                <TableCell
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '100px' : '20%',
-                                        minWidth: isMobile ? '100px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                    }}
-                                >
-                                    Budget Year
-                                </TableCell>
-                                <TableCell
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '120px' : '25%',
-                                        minWidth: isMobile ? '120px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                    }}
-                                >
-                                    Loan Name
-                                </TableCell>
-                                <TableCell
-                                    align="right"
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '100px' : '25%',
-                                        minWidth: isMobile ? '100px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                    }}
-                                >
-                                    {isMobile ? 'Afdrag' : `Afdrag (${currencyText})`}
-                                </TableCell>
-                                <TableCell
-                                    align="right"
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '100px' : '20%',
-                                        minWidth: isMobile ? '100px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                    }}
-                                >
-                                    {isMobile ? 'Remaining' : `Remaining (${currencyText})`}
-                                </TableCell>
-                                <TableCell
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '90px' : '15%',
-                                        minWidth: isMobile ? '90px' : 'auto',
-                                        padding: isMobile ? '8px 4px' : '12px 8px',
-                                        fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                    }}
-                                >
-                                    Created
-                                </TableCell>
-                                <TableCell
-                                    sx={{
-                                        bgcolor: theme.palette.primary.main,
-                                        color: theme.palette.primary.contrastText,
-                                        fontWeight: 'bold',
-                                        width: isMobile ? '50px' : '5%',
-                                        minWidth: isMobile ? '50px' : 'auto',
-                                        padding: isMobile ? '8px 2px' : '12px 8px',
-                                    }}
-                                >
-                                </TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {loanPayments.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', padding: '2rem' }}>
-                                        No loan payments found. Create a loan and link expenses to it in the budget page.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                loanPayments.map((payment, index) => (
-                                    <TableRow key={`${payment.loanId}-${payment.year}-${index}`}>
-                                        <TableCell sx={{
-                                            color: theme.palette.text.primary,
-                                            padding: isMobile ? '8px 4px' : '12px 8px',
-                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        }}>
-                                            {payment.year}
-                                        </TableCell>
-                                        <TableCell sx={{
-                                            color: theme.palette.text.primary,
-                                            padding: isMobile ? '8px 4px' : '12px 8px',
-                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        }}>
-                                            {payment.loanName}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{
-                                            color: theme.palette.text.primary,
-                                            padding: isMobile ? '8px 4px' : '12px 8px',
-                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        }}>
-                                            {formatCurrency(payment.totalPayment, currency)}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{
-                                            color: payment.remaining > 0 ? theme.palette.info.main : theme.palette.text.primary,
-                                            padding: isMobile ? '8px 4px' : '12px 8px',
-                                            fontWeight: payment.remaining > 0 ? 'bold' : 'normal',
-                                            fontSize: isMobile ? '0.75rem' : '0.875rem',
-                                        }}>
-                                            {formatCurrency(payment.remaining, currency)}
-                                        </TableCell>
-                                        <TableCell sx={{
-                                            color: theme.palette.text.primary,
-                                            padding: isMobile ? '8px 4px' : '12px 8px',
-                                            fontSize: isMobile ? '0.7rem' : '0.875rem',
-                                        }}>
-                                            {payment.createdAt ? new Date(payment.createdAt).toLocaleDateString('en-US', {
-                                                year: 'numeric',
-                                                month: isMobile ? 'numeric' : 'short',
-                                                day: 'numeric'
-                                            }) : '-'}
-                                        </TableCell>
-                                        <TableCell sx={{ padding: isMobile ? '4px 2px' : '4px' }}>
-                                            {index === 0 || loanPayments[index - 1].loanId !== payment.loanId ? (
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => handleDeleteLoan(payment.loanId)}
-                                                    sx={{
-                                                        color: theme.palette.error.main,
-                                                        '&:hover': {
-                                                            bgcolor: theme.palette.error.light,
-                                                        },
-                                                    }}
-                                                >
-                                                    <DeleteIcon fontSize="small" />
-                                                </IconButton>
-                                            ) : null}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                </Paper>
+                <Typography sx={{ color: theme.palette.text.secondary, fontSize: '0.875rem', mb: 2 }}>
+                    Payments appear here when you enter amounts on budget expenses linked to a loan.
+                </Typography>
 
-                {/* Create Loan Dialog */}
+                {loans.length === 0 ? (
+                    <Paper sx={{ bgcolor: theme.palette.background.paper, p: 4, textAlign: 'center' }}>
+                        <AccountBalanceIcon sx={{ fontSize: 48, color: theme.palette.text.secondary, opacity: 0.4, mb: 1 }} />
+                        <Typography sx={{ color: theme.palette.text.secondary }}>
+                            No loans yet. Create a loan, then link an expense to it on the Budget page.
+                        </Typography>
+                    </Paper>
+                ) : (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {loanSummaries.map((summary) => (
+                            <Paper
+                                key={summary.loan.id}
+                                sx={{
+                                    bgcolor: theme.palette.background.paper,
+                                    p: isMobile ? 1.5 : 2,
+                                    borderRadius: '12px',
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: isMobile ? 'flex-start' : 'center',
+                                        justifyContent: 'space-between',
+                                        gap: 1.5,
+                                        flexWrap: 'wrap',
+                                        mb: 1.5,
+                                    }}
+                                >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                        <AccountBalanceIcon sx={{ color: theme.palette.info.main }} />
+                                        <Typography sx={{ color: theme.palette.text.primary, fontWeight: 700, fontSize: '1.1rem' }}>
+                                            {summary.loan.name}
+                                        </Typography>
+                                        {summary.isDone ? (
+                                            <Chip
+                                                label="Loan done"
+                                                size="small"
+                                                sx={{
+                                                    bgcolor: theme.palette.success.main,
+                                                    color: theme.palette.success.contrastText || '#fff',
+                                                    fontWeight: 600,
+                                                }}
+                                            />
+                                        ) : (
+                                            <Chip
+                                                label="Active"
+                                                size="small"
+                                                variant="outlined"
+                                                sx={{
+                                                    borderColor: theme.palette.info.main,
+                                                    color: theme.palette.info.main,
+                                                }}
+                                            />
+                                        )}
+                                    </Box>
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => handleDeleteLoan(summary.loan.id)}
+                                        aria-label={`Delete ${summary.loan.name}`}
+                                        sx={{
+                                            color: theme.palette.error.main,
+                                            '&:hover': { bgcolor: theme.palette.error.light },
+                                        }}
+                                    >
+                                        <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+
+                                <Box
+                                    sx={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: isMobile ? 1.5 : 3,
+                                        mb: 1.5,
+                                        color: theme.palette.text.secondary,
+                                        fontSize: '0.85rem',
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: 'inherit', color: 'inherit' }}>
+                                        Original:{' '}
+                                        <strong style={{ color: theme.palette.text.primary }}>
+                                            {formatCurrency(summary.loan.amount, currency)}
+                                        </strong>
+                                    </Typography>
+                                    <Typography sx={{ fontSize: 'inherit', color: 'inherit' }}>
+                                        Paid:{' '}
+                                        <strong style={{ color: theme.palette.text.primary }}>
+                                            {formatCurrency(summary.totalPaid, currency)}
+                                        </strong>
+                                    </Typography>
+                                    <Typography sx={{ fontSize: 'inherit', color: 'inherit' }}>
+                                        Remaining:{' '}
+                                        <strong
+                                            style={{
+                                                color: summary.isDone
+                                                    ? theme.palette.success.main
+                                                    : theme.palette.info.main,
+                                            }}
+                                        >
+                                            {summary.isDone
+                                                ? 'Loan done'
+                                                : formatCurrency(summary.remaining, currency)}
+                                        </strong>
+                                    </Typography>
+                                    <Typography sx={{ fontSize: 'inherit', color: 'inherit' }}>
+                                        Started:{' '}
+                                        {summary.loan.startDate
+                                            ? formatPaymentDate(summary.loan.startDate)
+                                            : '—'}
+                                    </Typography>
+                                </Box>
+
+                                {summary.payments.length === 0 ? (
+                                    <Typography sx={{ color: theme.palette.text.secondary, fontStyle: 'italic', fontSize: '0.875rem' }}>
+                                        No payments yet. Enter amounts on a linked expense in Budget.
+                                    </Typography>
+                                ) : (
+                                    <Box sx={{ overflowX: 'auto' }}>
+                                        <Table size="small">
+                                            <TableHead>
+                                                <TableRow>
+                                                    <TableCell sx={{ fontWeight: 700, color: theme.palette.text.secondary }}>
+                                                        Date
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontWeight: 700, color: theme.palette.text.secondary }}>
+                                                        Loan
+                                                    </TableCell>
+                                                    <TableCell
+                                                        align="right"
+                                                        sx={{ fontWeight: 700, color: theme.palette.text.secondary }}
+                                                    >
+                                                        Amount
+                                                    </TableCell>
+                                                    {!isMobile && (
+                                                        <TableCell
+                                                            align="right"
+                                                            sx={{ fontWeight: 700, color: theme.palette.text.secondary }}
+                                                        >
+                                                            Remaining after
+                                                        </TableCell>
+                                                    )}
+                                                </TableRow>
+                                            </TableHead>
+                                            <TableBody>
+                                                {summary.payments.map((payment) => (
+                                                    <TableRow key={payment.key}>
+                                                        <TableCell sx={{ color: theme.palette.text.primary }}>
+                                                            {formatPaymentDate(payment.date)}
+                                                        </TableCell>
+                                                        <TableCell sx={{ color: theme.palette.text.primary }}>
+                                                            <Box>
+                                                                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                                                                    {payment.loanName}
+                                                                </Typography>
+                                                                {payment.expenseName !== payment.loanName && (
+                                                                    <Typography sx={{ fontSize: '0.75rem', color: theme.palette.text.secondary }}>
+                                                                        {payment.expenseName}
+                                                                    </Typography>
+                                                                )}
+                                                            </Box>
+                                                        </TableCell>
+                                                        <TableCell align="right" sx={{ color: theme.palette.text.primary, fontWeight: 600 }}>
+                                                            {formatCurrency(payment.amount, currency)}
+                                                        </TableCell>
+                                                        {!isMobile && (
+                                                            <TableCell
+                                                                align="right"
+                                                                sx={{
+                                                                    color:
+                                                                        payment.remainingAfter <= 0
+                                                                            ? theme.palette.success.main
+                                                                            : theme.palette.text.secondary,
+                                                                    fontWeight: payment.remainingAfter <= 0 ? 600 : 400,
+                                                                }}
+                                                            >
+                                                                {payment.remainingAfter <= 0
+                                                                    ? 'Loan done'
+                                                                    : formatCurrency(payment.remainingAfter, currency)}
+                                                            </TableCell>
+                                                        )}
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </Box>
+                                )}
+                            </Paper>
+                        ))}
+                    </Box>
+                )}
+
                 <Dialog
                     open={modalOpen}
                     onClose={() => setModalOpen(false)}
@@ -481,6 +460,7 @@ export default function Loan() {
                             margin: isMobile ? 0 : 'auto',
                             width: isMobile ? '100%' : 'auto',
                             maxHeight: isMobile ? '100%' : '90vh',
+                            bgcolor: theme.palette.background.paper,
                         }
                     }}
                 >
@@ -495,26 +475,6 @@ export default function Loan() {
                                 onChange={(e) => setLoanName(e.target.value)}
                                 fullWidth
                                 autoFocus
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        color: theme.palette.text.primary,
-                                        '& fieldset': {
-                                            borderColor: theme.palette.secondary.main,
-                                        },
-                                        '&:hover fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                    },
-                                    '& .MuiInputLabel-root': {
-                                        color: theme.palette.text.secondary,
-                                        '&.Mui-focused': {
-                                            color: theme.palette.primary.main,
-                                        },
-                                    },
-                                }}
                             />
                             <TextField
                                 label="Loan Amount"
@@ -522,26 +482,6 @@ export default function Loan() {
                                 value={loanAmount}
                                 onChange={(e) => setLoanAmount(e.target.value)}
                                 fullWidth
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        color: theme.palette.text.primary,
-                                        '& fieldset': {
-                                            borderColor: theme.palette.secondary.main,
-                                        },
-                                        '&:hover fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                    },
-                                    '& .MuiInputLabel-root': {
-                                        color: theme.palette.text.secondary,
-                                        '&.Mui-focused': {
-                                            color: theme.palette.primary.main,
-                                        },
-                                    },
-                                }}
                             />
                             <TextField
                                 label="Start Date"
@@ -549,29 +489,7 @@ export default function Loan() {
                                 value={loanStartDate}
                                 onChange={(e) => setLoanStartDate(e.target.value)}
                                 fullWidth
-                                InputLabelProps={{
-                                    shrink: true,
-                                }}
-                                sx={{
-                                    '& .MuiOutlinedInput-root': {
-                                        color: theme.palette.text.primary,
-                                        '& fieldset': {
-                                            borderColor: theme.palette.secondary.main,
-                                        },
-                                        '&:hover fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                        '&.Mui-focused fieldset': {
-                                            borderColor: theme.palette.primary.main,
-                                        },
-                                    },
-                                    '& .MuiInputLabel-root': {
-                                        color: theme.palette.text.secondary,
-                                        '&.Mui-focused': {
-                                            color: theme.palette.primary.main,
-                                        },
-                                    },
-                                }}
+                                InputLabelProps={{ shrink: true }}
                             />
                         </Box>
                     </DialogContent>
@@ -583,12 +501,7 @@ export default function Loan() {
                                 setLoanAmount('');
                                 setLoanStartDate('');
                             }}
-                            sx={{
-                                color: theme.palette.text.secondary,
-                                '&:hover': {
-                                    bgcolor: theme.palette.background.default,
-                                },
-                            }}
+                            sx={{ textTransform: 'none', color: theme.palette.text.secondary }}
                         >
                             Cancel
                         </Button>
@@ -596,13 +509,7 @@ export default function Loan() {
                             onClick={handleCreateLoan}
                             disabled={!loanName.trim() || !loanAmount || !loanStartDate || saving}
                             variant="contained"
-                            sx={{
-                                bgcolor: theme.palette.primary.main,
-                                color: theme.palette.primary.contrastText,
-                                '&:hover': {
-                                    bgcolor: theme.palette.primary.dark,
-                                },
-                            }}
+                            sx={{ textTransform: 'none' }}
                         >
                             Create
                         </Button>
